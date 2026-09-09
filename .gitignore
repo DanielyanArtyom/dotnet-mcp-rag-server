@@ -1,0 +1,15 @@
+# Research / planning scratch (superpowers specs, investigation notes) — not part of the shipped project
+.research/
+
+# .NET
+bin/
+obj/
+*.user
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
