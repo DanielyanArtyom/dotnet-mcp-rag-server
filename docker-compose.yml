@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: lumen
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - lumen-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  lumen-postgres-data:

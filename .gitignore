@@ -1,10 +1,16 @@
 # Research / planning scratch (superpowers specs, investigation notes) — not part of the shipped project
 .research/
 
+# Subagent-driven-development workspace (ledgers, briefs, review packages)
+.superpowers/
+
 # .NET
 bin/
 obj/
 *.user
+
+# NLog file output
+Logs/
 
 # IDE
 .vs/

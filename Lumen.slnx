@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Lumen.Api/Lumen.Api.csproj" />
+    <Project Path="src/Lumen.Application/Lumen.Application.csproj" />
+    <Project Path="src/Lumen.Domain/Lumen.Domain.csproj" />
+    <Project Path="src/Lumen.Infrastructure/Lumen.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Lumen.IntegrationTests/Lumen.IntegrationTests.csproj" />
+    <Project Path="tests/Lumen.UnitTests/Lumen.UnitTests.csproj" />
+  </Folder>
+</Solution>

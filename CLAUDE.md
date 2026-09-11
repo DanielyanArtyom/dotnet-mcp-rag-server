@@ -4,7 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Pre-implementation.** Only planning/research artifacts exist so far (this file, `README.md`, `.research/`). No solution, no code, no build yet. Stage 1 (below) has not started. Update this file's "Commands" section once a solution exists.
+**Stage 1 (Skeleton) complete.** The Onion-Architecture solution exists and builds: `Lumen.Domain` / `Lumen.Application` / `Lumen.Infrastructure` / `Lumen.Api` + `Lumen.UnitTests` / `Lumen.IntegrationTests`, per `.research/stage-1/design.md` and `.research/stage-1/plan.md`. Multi-tenancy (`TenantId` discriminator + EF Core global query filters), self-issued JWT auth, and one end-to-end `Document` CRUD vertical slice all work and are proven by tests — including two independent tenant-isolation tests (EF-level and full-HTTP-level). 23/23 tests passing (11 unit, 12 integration) as of the last full run. Stage 2 (Ingest & chunking) has not started.
+
+## Commands
+
+- Build: `dotnet build`
+- Run all tests: `dotnet test` (integration tests need Docker running — see note below)
+- Run just unit tests: `dotnet test tests/Lumen.UnitTests`
+- Run just integration tests: `dotnet test tests/Lumen.IntegrationTests` (spins up a real Postgres container via Testcontainers; needs Docker running, `postgres:17-alpine` gets pulled on first run)
+- Local Postgres for manual running/Swagger use: `docker compose up -d`, then `dotnet run --project src/Lumen.Api` and open the printed Swagger URL
+- Local dev login: seeded users `admin@acme.test` / `admin@globex.test`, password `Passw0rd!` (see `DbSeeder`)
+- Logging: NLog, configured in `src/Lumen.Api/nlog.config` — writes to console and to `Logs/` (gitignored, created next to the running binary) with daily rolling files.
+- **Docker API version note:** if `dotnet test`/Testcontainers fails with a `DockerUnavailableException` on the integration test project, your local Docker Engine's reported API version may be older than what Testcontainers negotiates by default — set `DOCKER_API_VERSION` to match your `docker version --format '{{.Server.APIVersion}}'` output (e.g. `DOCKER_API_VERSION=1.43 dotnet test`). This was needed in the environment Stage 1 was built in (Docker Engine 24.0.7, API 1.43); may not be needed on a newer Docker installation.
 
 ## Git
 
@@ -16,7 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## The 7-stage plan
 
-Each stage gets its own planning pass (brainstorming/writing-plans) before implementation, driven by the user one stage at a time — don't jump ahead to a later stage's design unprompted.
+Each stage follows the same order, driven by the user one stage at a time — don't jump ahead to a later stage's research/design/plan unprompted: **research → planning+design → spec → user approval → implementation.** Concretely: research notes / design.md / plan.md live under `.research/stage-N/` (via brainstorming → writing-plans); a settled-convention spec, if one emerges from a review pass, goes to `.research/specification/<name>.md`; implementation (via `subagent-driven-development`/`executing-plans`) does not start until the user has explicitly approved design.md/plan.md. Full breakdown: `.research/README.md`.
 
 1. **Skeleton** — Onion Architecture solution (Domain / Application / Infrastructure / API), multi-tenancy via a `TenantId` discriminator column + EF Core global query filters.
 2. **Ingest & chunking** — document upload, parsing, chunking pipeline (size, overlap, sentence boundaries, metadata). Corpus: SEC EDGAR filings (10-K/10-Q), one company per tenant — deliberately messy/table-heavy as a chunking stress test.
@@ -47,6 +58,22 @@ Chunk size/overlap strategy, exact eval question content, retrieval tuning (hybr
 
 - **`DECISIONS.md`** (repo root, tracked in git) — after each stage, 3-6 lines: context → alternatives → decision → why (with a number) → when I'd reconsider. This is the interview-prep artifact; don't let it turn into a changelog. **Only real, evidenced decisions go in it — no example/placeholder entries, ever**, even to illustrate the format (the template alone is enough for that).
 - **`.research/`** (gitignored) — investigation notes, one file per topic (never one giant file), plus its own `README.md` index. Superpowers spec docs also go here instead of the usual `docs/superpowers/specs/` default.
+
+## C# code style conventions
+
+- **Comments:** default to none. Only add one when the *why* is genuinely non-obvious — a hidden constraint, a workaround for a specific library/framework bug, an invariant a future edit could silently break. Never narrate *what* the code does or restate history ("added for X task", "changed because of Y review"). If you're unsure, leave it out — it's cheaper to add one later than to accumulate narration nobody reads.
+- **`using` directives, per project:**
+  - Every project (`Lumen.Domain`, `Lumen.Application`, `Lumen.Infrastructure`, `Lumen.Api`, `Lumen.UnitTests`, `Lumen.IntegrationTests`) has its own `GlobalUsings.cs` at its root.
+  - A namespace goes in that project's `GlobalUsings.cs` (as `global using X;`) once it's used in **more than one file** in that project — not before. A `using` needed in only one file stays a local `using` in that file.
+  - When adding a new `using` to a file, check whether that namespace is already used elsewhere in the same project (or would be, after your change, in 2+ files). If so, move it into that project's `GlobalUsings.cs` and remove the local `using` from every file in the project that had it — don't leave it duplicated in both places.
+  - Never leave an unused `using` (local or in `GlobalUsings.cs`) — remove it as soon as nothing in the project references that namespace anymore. Don't rely on this happening automatically at build time (no analyzer is wired in for it); check by hand.
+  - Don't duplicate a namespace the .NET SDK already injects implicitly (`ImplicitUsings` is `enable` on every project) — e.g. `System`, `System.Linq`, `System.Threading.Tasks`, and (on `Lumen.Api`) the ASP.NET Core namespaces are already global via the SDK; adding them again in `GlobalUsings.cs` just produces a duplicate-using warning.
+  - **Within a `GlobalUsings.cs`, group entries into four blocks, separated by one blank line, in this fixed order: `Lumen.*` → `Microsoft.*` → `System.*` → everything else** (third-party packages — `AutoMapper`, `MediatR`, `Moq`, `NLog.Web`, etc.). A project with nothing in a given group simply omits that block rather than leaving an empty one. Order *within* a block isn't enforced. Every time a `using` gets added or promoted to `GlobalUsings.cs`, place it in the matching block — don't just append it at the end of the file.
+- **Constructor injection:** classes constructed via DI (controllers, MediatR handlers, `IExceptionHandler`/middleware implementations) use a traditional constructor + `private readonly` fields, not C# primary-constructor parameters — even though the latter is shorter. `WebApplicationBuilder`/`IServiceCollection`/`IApplicationBuilder` extension methods (the `Extensions`/`DependencyInjection` folders) are static and untouched by this — primary-constructor syntax there is unrelated (there's no DI, no instance to construct).
+- **Don't fully-qualify a type when a `using` would do.** `Lumen.Domain.User` / `Domain.User` in a file that could just say `using Lumen.Domain;` and then `User` is noise — add the `using` (local or promote to `GlobalUsings.cs` per the rule above once it's in 2+ files) and read the bare name. Fully-qualify only to resolve a genuine ambiguity between two types with the same short name.
+- **DTOs live only in `Lumen.Api`** (under `DTO/Requests/` and `DTO/Responses/`), never in `Lumen.Application`. Application's commands/queries/handlers accept and return Domain models (`Lumen.Domain`) or plain primitives — never a Dto type. The Api layer (controllers) is the only place that maps Domain → Dto (via `IMapper`, using the `Lumen.Api.Mapping` profile) before returning a response, and Dto → command/query input at the request-binding boundary.
+- **Repeated magic strings become named constants**, in a `Constants/` folder in whichever project owns the concept (e.g. `Lumen.Infrastructure/Constants/JwtClaimConstants.cs` for the `"tenant_id"` JWT claim name and the `"Jwt"` config section name — both were scattered as literals across Infrastructure and Api before). Apply per-project as new cross-file literals appear; don't invent a constant for a string used in exactly one place.
+- **`Options` classes live in that project's `DependencyInjection/` folder** (e.g. `Lumen.Infrastructure/DependencyInjection/JwtOptions.cs`), not next to the service that consumes them — the binding/config concern belongs with the rest of that project's DI wiring.
 
 ## Working with the user
 
