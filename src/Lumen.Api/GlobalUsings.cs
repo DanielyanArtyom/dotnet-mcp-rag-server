@@ -13,6 +13,7 @@ global using Lumen.Infrastructure.Mapping;
 global using Lumen.Application.Exceptions;
 global using Lumen.Application.Documents.Commands;
 global using Lumen.Application.Documents.Queries;
+global using Lumen.Api.Extensions;
 
 global using Microsoft.AspNetCore.Authorization;
 global using Microsoft.AspNetCore.Diagnostics;
@@ -28,4 +29,3 @@ global using System.Text;
 global using AutoMapper;
 global using MediatR;
 global using NLog.Web;
-

@@ -36,7 +36,15 @@ public static class TestDataSeeder
         if (document is { } doc)
         {
             documentId = Guid.NewGuid();
-            context.Documents.Add(new DocumentEntity { Id = documentId.Value, TenantId = tenantId, Title = doc.Title, Content = doc.Content });
+            context.Documents.Add(new DocumentEntity
+            {
+                Id = documentId.Value,
+                TenantId = tenantId,
+                Title = doc.Title,
+                Content = doc.Content,
+                RawFilePath = $"{tenantId}/{documentId.Value}.htm",
+                FilingDate = DateOnly.FromDateTime(DateTime.UtcNow)
+            });
         }
 
         await context.SaveChangesAsync();

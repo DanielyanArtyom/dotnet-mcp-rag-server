@@ -11,9 +11,9 @@ public class DocumentTenantIsolationTests(PostgresFixture fixture) : IAsyncLifet
     {
         _factory = TestWebApplicationFactory.Create(fixture.ConnectionString);
         _tenantA = await TestDataSeeder.SeedTenantWithUserAndDocumentAsync(
-            fixture.ConnectionString, "Acme", "Acme secret document", "Only Acme should ever see this.");
+            fixture.ConnectionString, "Acme", "Acme secret document", "Only Acme should ever see this.", Role.Admin);
         _tenantB = await TestDataSeeder.SeedTenantWithUserAndDocumentAsync(
-            fixture.ConnectionString, "Globex", "Globex secret document", "Only Globex should ever see this.");
+            fixture.ConnectionString, "Globex", "Globex secret document", "Only Globex should ever see this.", Role.Admin);
     }
 
     public Task DisposeAsync()
@@ -63,7 +63,14 @@ public class DocumentTenantIsolationTests(PostgresFixture fixture) : IAsyncLifet
 
         await TestAuth.AuthenticateAsync(client, _tenantA.Email, _tenantA.Password);
 
-        var created = await client.PostAsJsonAsync("/api/documents", new { title, content = "Revenue is up." });
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent("<html><body><p>Revenue is up.</p></body></html>"u8.ToArray());
+        file.Headers.ContentType = new MediaTypeHeaderValue("text/html");
+        form.Add(file, "file", "acme.htm");
+        form.Add(new StringContent(title), "title");
+        form.Add(new StringContent("2025-10-31"), "filingDate");
+
+        var created = await client.PostAsync("/api/documents/upload", form);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
 
         var documentsForA = await client.GetFromJsonAsync<List<DocumentDto>>("/api/documents");

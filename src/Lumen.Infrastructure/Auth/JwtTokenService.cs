@@ -1,11 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using Lumen.Infrastructure.Constants;
-using Lumen.Infrastructure.DependencyInjection;
-using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
-
 namespace Lumen.Infrastructure.Auth;
 
 public class JwtTokenService : IJwtTokenService

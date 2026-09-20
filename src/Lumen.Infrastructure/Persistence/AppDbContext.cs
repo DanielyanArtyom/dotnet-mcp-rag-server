@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<TenantEntity> Tenants => Set<TenantEntity>();
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<DocumentEntity> Documents => Set<DocumentEntity>();
+    public DbSet<DocumentChunkEntity> DocumentChunks => Set<DocumentChunkEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +21,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<UserEntity>().HasQueryFilter(u => u.TenantId == _currentTenant.TenantId);
         modelBuilder.Entity<DocumentEntity>().HasQueryFilter(d => d.TenantId == _currentTenant.TenantId);
+        modelBuilder.Entity<DocumentChunkEntity>().HasQueryFilter(c => c.TenantId == _currentTenant.TenantId);
     }
 
     // Every SaveChanges overload funnels through here and always overwrites TenantId with the

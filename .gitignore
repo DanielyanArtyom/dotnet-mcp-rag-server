@@ -19,3 +19,6 @@ Logs/
 
 # OS
 .DS_Store
+
+# Uploaded raw documents
+App_Data/

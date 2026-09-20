@@ -5,6 +5,13 @@ public static class WebApplicationBuilderExtensions
     public static WebApplicationBuilder Configure(this WebApplicationBuilder builder)
     {
         builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtClaimConstants.SectionName));
+        builder.Services.Configure<FileStorageOptions>(builder.Configuration.GetSection(FileStorageOptions.SectionName));
+        builder.Services.PostConfigure<FileStorageOptions>(o =>
+        {
+            if (!Path.IsPathRooted(o.RootPath))
+                o.RootPath = Path.Combine(builder.Environment.ContentRootPath, o.RootPath);
+        });
+        builder.Services.Configure<ChunkingOptions>(builder.Configuration.GetSection(ChunkingOptions.SectionName));
 
         builder.Services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
