@@ -17,6 +17,13 @@ public class DocumentChunkRepository : IDocumentChunkRepository
         _context.DocumentChunks.Add(dbEntity);
     }
 
+    public void Remove(DocumentChunk entity)
+    {
+        var dbEntity = _context.DocumentChunks.Local.FirstOrDefault(c => c.Id == entity.Id)
+                       ?? _mapper.Map<DocumentChunkEntity>(entity);
+        _context.DocumentChunks.Remove(dbEntity);
+    }
+
     public async Task<DocumentChunk?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var dbEntity = await _context.DocumentChunks.FirstOrDefaultAsync(c => c.Id == id, ct);

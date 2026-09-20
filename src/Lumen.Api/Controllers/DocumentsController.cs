@@ -19,17 +19,17 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<DocumentDto>>> GetAll(CancellationToken ct)
+    public async Task<ActionResult<List<DocumentDto>>> GetAll([FromQuery] bool includeContent, CancellationToken ct)
     {
         var documents = await _mediator.Send(new GetDocumentsQuery(), ct);
-        return Ok(_mapper.Map<List<DocumentDto>>(documents));
+        return Ok(documents.Select(d => ToDto(d, includeContent)).ToList());
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<DocumentDto>> GetById(Guid id, CancellationToken ct)
+    public async Task<ActionResult<DocumentDto>> GetById(Guid id, [FromQuery] bool includeContent, CancellationToken ct)
     {
         var document = await _mediator.Send(new GetDocumentByIdQuery(id), ct);
-        return document is null ? NotFound() : Ok(_mapper.Map<DocumentDto>(document));
+        return document is null ? NotFound() : Ok(ToDto(document, includeContent));
     }
 
     [HttpPost("upload")]
@@ -44,9 +44,17 @@ public class DocumentsController : ControllerBase
         await using var stream = file.OpenReadStream();
         var result = await _mediator.Send(new UploadDocumentCommand(file.FileName, stream, title, filingDate!.Value), ct);
 
-        var dto = _mapper.Map<DocumentDto>(result.Document);
+        var dto = ToDto(result.Document, includeContent: false);
         dto.ChunkCount = result.ChunkCount;
         return CreatedAtAction(nameof(GetById), new { id = dto.Id }, dto);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = nameof(Role.Admin))]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteDocumentCommand(id), ct);
+        return NoContent();
     }
 
     [HttpGet("{id:guid}/chunks")]
@@ -58,5 +66,14 @@ public class DocumentsController : ControllerBase
 
         var chunks = await _mediator.Send(new GetDocumentChunksQuery(id), ct);
         return Ok(_mapper.Map<List<DocumentChunkDto>>(chunks));
+    }
+
+    private DocumentDto ToDto(Document document, bool includeContent)
+    {
+        var dto = _mapper.Map<DocumentDto>(document);
+        if (!includeContent)
+            dto.Content = null;
+
+        return dto;
     }
 }

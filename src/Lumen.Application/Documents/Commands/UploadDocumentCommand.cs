@@ -16,19 +16,22 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
     private readonly IFileStorage _fileStorage;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentTenant _currentTenant;
+    private readonly ITenantLookupService _tenantLookup;
 
     public UploadDocumentCommandHandler(
         IDocumentReaderFactory readerFactory,
         IChunker chunker,
         IFileStorage fileStorage,
         IUnitOfWork unitOfWork,
-        ICurrentTenant currentTenant)
+        ICurrentTenant currentTenant,
+        ITenantLookupService tenantLookup)
     {
         _readerFactory = readerFactory;
         _chunker = chunker;
         _fileStorage = fileStorage;
         _unitOfWork = unitOfWork;
         _currentTenant = currentTenant;
+        _tenantLookup = tenantLookup;
     }
 
     public async Task<UploadDocumentResult> Handle(UploadDocumentCommand request, CancellationToken ct)
@@ -39,7 +42,7 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
 
         var documentId = Guid.NewGuid();
         var chunks = _chunker.Chunk(documentId, elements);
-        var rawFilePath = await SaveRawFileAsync(request.FileName, documentId, bytes, ct);
+        var rawFilePath = await SaveRawFileAsync(request, documentId, bytes, ct);
 
         var document = BuildDocument(request, documentId, elements, rawFilePath);
         AddToUnitOfWork(document, chunks);
@@ -80,10 +83,13 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
         }
     }
 
-    private Task<string> SaveRawFileAsync(string fileName, Guid documentId, byte[] bytes, CancellationToken ct)
+    private async Task<string> SaveRawFileAsync(UploadDocumentCommand request, Guid documentId, byte[] bytes, CancellationToken ct)
     {
-        var extension = Path.GetExtension(fileName);
-        return _fileStorage.SaveAsync(_currentTenant.TenantId, documentId, extension, new MemoryStream(bytes), ct);
+        var tenantId = _currentTenant.TenantId;
+        var tenantName = await _tenantLookup.GetNameAsync(tenantId, ct) ?? string.Empty;
+        var extension = Path.GetExtension(request.FileName);
+
+        return await _fileStorage.SaveAsync(tenantId, tenantName, documentId, request.Title, extension, new MemoryStream(bytes), ct);
     }
 
     private static Document BuildDocument(

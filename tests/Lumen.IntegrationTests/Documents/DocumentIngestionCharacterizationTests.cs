@@ -49,13 +49,15 @@ public class DocumentIngestionCharacterizationTests(PostgresFixture fixture, ITe
         var tokens = chunks!.Select(c => c.TokenCount).Order().ToList();
         var tableCount = chunks!.Count(c => c.ChunkType == "Table");
         var proseCount = chunks!.Count(c => c.ChunkType == "Prose");
+        var withContent = await _client.GetFromJsonAsync<DocumentDto>($"/api/documents/{uploaded.Id}?includeContent=true");
+        var contentLength = withContent!.Content!.Length;
         output.WriteLine($"Upload elapsed: {stopwatch.Elapsed.TotalSeconds:F2}s");
-        output.WriteLine($"Document content chars: {uploaded.Content.Length}");
+        output.WriteLine($"Document content chars: {contentLength}");
         output.WriteLine($"Chunks: {chunks!.Count} (prose {proseCount}, table {tableCount})");
         output.WriteLine($"Tokens min/median/p95/max: {tokens[0]}/{tokens[tokens.Count / 2]}/{tokens[(int)(tokens.Count * 0.95)]}/{tokens[^1]}");
 
         var allText = string.Concat(chunks!.Select(c => c.Text));
-        output.WriteLine($"Chunk text / document content length ratio: {(double)allText.Length / uploaded.Content.Length:F3}");
+        output.WriteLine($"Chunk text / document content length ratio: {(double)allText.Length / contentLength:F3}");
 
         Assert.Contains("Apple Inc.", allText);
         Assert.Contains("iPhone", allText);

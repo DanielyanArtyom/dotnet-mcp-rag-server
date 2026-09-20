@@ -11,17 +11,19 @@ public class UploadDocumentCommandHandlerTests
     private readonly Mock<IRepository<Document>> _documentRepository = new();
     private readonly Mock<IDocumentChunkRepository> _chunkRepository = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<ITenantLookupService> _tenantLookup = new();
 
     public UploadDocumentCommandHandlerTests()
     {
         _currentTenant.Setup(t => t.TenantId).Returns(_tenantId);
+        _tenantLookup.Setup(t => t.GetNameAsync(_tenantId, It.IsAny<CancellationToken>())).ReturnsAsync("Acme Corp");
         _readerFactory.Setup(f => f.GetReader(It.IsAny<string>())).Returns(_reader.Object);
         _unitOfWork.SetupGet(u => u.Documents).Returns(_documentRepository.Object);
         _unitOfWork.SetupGet(u => u.Chunks).Returns(_chunkRepository.Object);
     }
 
     private UploadDocumentCommandHandler CreateHandler() =>
-        new(_readerFactory.Object, _chunker.Object, _fileStorage.Object, _unitOfWork.Object, _currentTenant.Object);
+        new(_readerFactory.Object, _chunker.Object, _fileStorage.Object, _unitOfWork.Object, _currentTenant.Object, _tenantLookup.Object);
 
     [Fact]
     public async Task Handle_reads_chunks_stores_the_file_and_persists_the_document()
@@ -32,7 +34,7 @@ public class UploadDocumentCommandHandlerTests
         var chunks = new List<DocumentChunk> { new() { Id = Guid.NewGuid(), ChunkIndex = 0, Text = "Some cleaned text.", TokenCount = 3, ChunkType = ChunkType.Prose } };
         _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements)).Returns(chunks);
 
-        _fileStorage.Setup(s => s.SaveAsync(_tenantId, It.IsAny<Guid>(), ".htm", It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+        _fileStorage.Setup(s => s.SaveAsync(_tenantId, "Acme Corp", It.IsAny<Guid>(), "Apple 10-K FY2025", ".htm", It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync($"{_tenantId}/some-id.htm");
 
         using var content = new MemoryStream();
@@ -69,8 +71,8 @@ public class UploadDocumentCommandHandlerTests
                 return new List<DocumentElement>();
             });
         _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), It.IsAny<List<DocumentElement>>())).Returns(new List<DocumentChunk>());
-        _fileStorage.Setup(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), ".pdf", It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
-            .Returns<Guid, Guid, string, Stream, CancellationToken>(async (_, _, _, s, _) =>
+        _fileStorage.Setup(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), ".pdf", It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Returns<Guid, string, Guid, string, string, Stream, CancellationToken>(async (_, _, _, _, _, s, _) =>
             {
                 using var copy = new MemoryStream();
                 await s.CopyToAsync(copy);
@@ -113,7 +115,7 @@ public class UploadDocumentCommandHandlerTests
         var ex = await Assert.ThrowsAsync<ValidationException>(() => CreateHandler().Handle(command, CancellationToken.None));
 
         Assert.Contains("broken.pdf", ex.Message);
-        _fileStorage.Verify(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Never);
+        _fileStorage.Verify(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Never);
         _unitOfWork.Verify(u => u.CompleteAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 }

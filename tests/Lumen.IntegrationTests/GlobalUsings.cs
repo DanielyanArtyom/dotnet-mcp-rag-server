@@ -1,5 +1,6 @@
 global using Lumen.Api.DTO.Responses;
-global using Lumen.Domain;
+global using Lumen.Domain.Entities;
+global using Lumen.Domain.Enums;
 global using Lumen.Infrastructure.Mapping;
 global using Lumen.Infrastructure.Persistence;
 global using Lumen.Infrastructure.Persistence.Entities;

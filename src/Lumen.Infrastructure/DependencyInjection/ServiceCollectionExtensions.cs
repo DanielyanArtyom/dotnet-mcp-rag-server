@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IUserLookupService, UserLookupService>();
+        services.AddScoped<ITenantLookupService, TenantLookupService>();
         services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IDocumentReaderFactory, DocumentReaderFactory>();

@@ -1,4 +1,4 @@
-namespace Lumen.Domain;
+namespace Lumen.Domain.Entities;
 
 public class Tenant
 {

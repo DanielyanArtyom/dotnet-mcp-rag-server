@@ -12,10 +12,10 @@ public class LocalFileStorageTests : IDisposable
         var documentId = Guid.NewGuid();
         using var content = new MemoryStream(Encoding.UTF8.GetBytes("<html>hi</html>"));
 
-        var relativePath = await storage.SaveAsync(tenantId, documentId, ".htm", content);
+        var relativePath = await storage.SaveAsync(tenantId, "Acme Corp", documentId, "Q3 report", ".htm", content);
 
-        Assert.Equal($"{tenantId}/{documentId}.htm", relativePath);
-        Assert.True(File.Exists(Path.Combine(_root, tenantId.ToString(), $"{documentId}.htm")));
+        Assert.Equal($"Acme-Corp_{tenantId}/Q3-report_{documentId}.htm", relativePath);
+        Assert.True(File.Exists(Path.Combine(_root, $"Acme-Corp_{tenantId}", $"Q3-report_{documentId}.htm")));
     }
 
     [Fact]
@@ -25,7 +25,7 @@ public class LocalFileStorageTests : IDisposable
         var tenantId = Guid.NewGuid();
         var documentId = Guid.NewGuid();
         using var content = new MemoryStream(Encoding.UTF8.GetBytes("<html>hi</html>"));
-        var relativePath = await storage.SaveAsync(tenantId, documentId, ".htm", content);
+        var relativePath = await storage.SaveAsync(tenantId, "Acme Corp", documentId, "Q3 report", ".htm", content);
 
         await using var readBack = await storage.OpenReadAsync(relativePath);
         using var reader = new StreamReader(readBack);
@@ -43,7 +43,7 @@ public class LocalFileStorageTests : IDisposable
         using var content = new MemoryStream(Encoding.UTF8.GetBytes("test"));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            storage.SaveAsync(tenantId, documentId, "/../x", content));
+            storage.SaveAsync(tenantId, "Acme Corp", documentId, "Q3 report", "/../x", content));
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class LocalFileStorageTests : IDisposable
         using var content = new MemoryStream(Encoding.UTF8.GetBytes("test"));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            storage.SaveAsync(tenantId, documentId, "..\\x", content));
+            storage.SaveAsync(tenantId, "Acme Corp", documentId, "Q3 report", "..\\x", content));
     }
 
     [Fact]
@@ -67,13 +67,13 @@ public class LocalFileStorageTests : IDisposable
 
         using (var content = new MemoryStream(Encoding.UTF8.GetBytes("test")))
         {
-            var result = await storage.SaveAsync(tenantId, documentId, ".htm", content);
-            Assert.Equal($"{tenantId}/{documentId}.htm", result);
+            var result = await storage.SaveAsync(tenantId, "Acme Corp", documentId, "Q3 report", ".htm", content);
+            Assert.Equal($"Acme-Corp_{tenantId}/Q3-report_{documentId}.htm", result);
         }
 
         using (var content = new MemoryStream(Encoding.UTF8.GetBytes("test")))
         {
-            var result = await storage.SaveAsync(tenantId, Guid.NewGuid(), ".pdf", content);
+            var result = await storage.SaveAsync(tenantId, "Acme Corp", Guid.NewGuid(), "Q3 report", ".pdf", content);
             Assert.EndsWith(".pdf", result);
         }
     }
@@ -85,7 +85,7 @@ public class LocalFileStorageTests : IDisposable
         var tenantId = Guid.NewGuid();
         var documentId = Guid.NewGuid();
         using var content = new MemoryStream(Encoding.UTF8.GetBytes("test"));
-        await storage.SaveAsync(tenantId, documentId, ".txt", content);
+        await storage.SaveAsync(tenantId, "Acme Corp", documentId, "Q3 report", ".txt", content);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             storage.OpenReadAsync("../otherTenant/file.txt"));
@@ -98,6 +98,59 @@ public class LocalFileStorageTests : IDisposable
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             storage.OpenReadAsync("/etc/passwd"));
+    }
+
+    [Theory]
+    [InlineData("../../etc/passwd", "etc-passwd")]
+    [InlineData("Apple 10-K/FY2025: draft", "Apple-10-K-FY2025-draft")]
+    [InlineData("Отчёт", "unnamed")]
+    [InlineData("   ", "unnamed")]
+    public async Task SaveAsync_turns_any_name_into_a_safe_slug(string name, string expectedSlug)
+    {
+        var storage = new LocalFileStorage(Options.Create(new FileStorageOptions { RootPath = _root }));
+        var tenantId = Guid.NewGuid();
+        var documentId = Guid.NewGuid();
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("test"));
+
+        var relativePath = await storage.SaveAsync(tenantId, name, documentId, name, ".htm", content);
+
+        Assert.Equal($"{expectedSlug}_{tenantId}/{expectedSlug}_{documentId}.htm", relativePath);
+        Assert.True(File.Exists(Path.Combine(_root, relativePath)));
+    }
+
+    [Fact]
+    public async Task SaveAsync_truncates_very_long_names()
+    {
+        var storage = new LocalFileStorage(Options.Create(new FileStorageOptions { RootPath = _root }));
+        var tenantId = Guid.NewGuid();
+        var documentId = Guid.NewGuid();
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("test"));
+
+        var relativePath = await storage.SaveAsync(tenantId, "Acme", documentId, new string('a', 500), ".htm", content);
+
+        Assert.Equal($"Acme_{tenantId}/{new string('a', 50)}_{documentId}.htm", relativePath);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_removes_the_file()
+    {
+        var storage = new LocalFileStorage(Options.Create(new FileStorageOptions { RootPath = _root }));
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes("test"));
+        var relativePath = await storage.SaveAsync(Guid.NewGuid(), "Acme", Guid.NewGuid(), "Report", ".htm", content);
+
+        await storage.DeleteAsync(relativePath);
+
+        Assert.False(File.Exists(Path.Combine(_root, relativePath)));
+    }
+
+    [Theory]
+    [InlineData("../x.txt")]
+    [InlineData("/etc/passwd")]
+    public async Task DeleteAsync_rejects_paths_outside_the_root(string relativePath)
+    {
+        var storage = new LocalFileStorage(Options.Create(new FileStorageOptions { RootPath = _root }));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => storage.DeleteAsync(relativePath));
     }
 
     public void Dispose()

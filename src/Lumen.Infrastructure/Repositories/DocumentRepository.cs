@@ -17,6 +17,13 @@ public class DocumentRepository : IRepository<Document>
         _context.Documents.Add(dbEntity);
     }
 
+    public void Remove(Document entity)
+    {
+        var dbEntity = _context.Documents.Local.FirstOrDefault(d => d.Id == entity.Id)
+                       ?? _mapper.Map<DocumentEntity>(entity);
+        _context.Documents.Remove(dbEntity);
+    }
+
     public async Task<Document?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var dbEntity = await _context.Documents.FirstOrDefaultAsync(d => d.Id == id, ct);

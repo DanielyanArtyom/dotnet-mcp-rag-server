@@ -54,7 +54,7 @@ public class DocumentUploadTests(PostgresFixture fixture) : IAsyncLifetime
         Assert.Equal(chunks!.OrderBy(c => c.ChunkIndex).Select(c => c.ChunkIndex), chunks!.Select(c => c.ChunkIndex));
 
         var root = _factory.Services.GetRequiredService<IOptions<FileStorageOptions>>().Value.RootPath;
-        Assert.True(File.Exists(Path.Combine(root, _tenantId.ToString(), $"{uploaded.Id}.htm")));
+        Assert.True(File.Exists(Path.Combine(root, $"Upload-test-tenant_{_tenantId}", $"Test-Document_{uploaded.Id}.htm")));
     }
 
     [Theory]
@@ -89,7 +89,7 @@ public class DocumentUploadTests(PostgresFixture fixture) : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var root = _factory.Services.GetRequiredService<IOptions<FileStorageOptions>>().Value.RootPath;
-        Assert.False(Directory.Exists(Path.Combine(root, memberTenantId.ToString())));
+        Assert.True(!Directory.Exists(root) || Directory.GetDirectories(root, $"*_{memberTenantId}").Length == 0);
     }
 
     [Fact]
@@ -146,5 +146,25 @@ public class DocumentUploadTests(PostgresFixture fixture) : IAsyncLifetime
         var response = await _client.PostAsync("/api/documents/upload", form);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Content_is_left_out_of_upload_and_list_responses_unless_requested()
+    {
+        using var form = BuildForm("<html><body><p>Hello content.</p></body></html>"u8.ToArray(), "test.htm", "text/html");
+        var uploaded = await (await _client.PostAsync("/api/documents/upload", form)).Content.ReadFromJsonAsync<DocumentDto>();
+        Assert.Null(uploaded!.Content);
+
+        var listWithout = await _client.GetFromJsonAsync<List<DocumentDto>>("/api/documents");
+        Assert.All(listWithout!, d => Assert.Null(d.Content));
+
+        var listWith = await _client.GetFromJsonAsync<List<DocumentDto>>("/api/documents?includeContent=true");
+        Assert.Contains("Hello content.", listWith!.Single(d => d.Id == uploaded.Id).Content);
+
+        var withoutById = await _client.GetFromJsonAsync<DocumentDto>($"/api/documents/{uploaded.Id}");
+        Assert.Null(withoutById!.Content);
+
+        var withById = await _client.GetFromJsonAsync<DocumentDto>($"/api/documents/{uploaded.Id}?includeContent=true");
+        Assert.Contains("Hello content.", withById!.Content);
     }
 }

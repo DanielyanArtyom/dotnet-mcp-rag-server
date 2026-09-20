@@ -1,4 +1,4 @@
-namespace Lumen.Domain;
+namespace Lumen.Domain.Enums;
 
 public enum ChunkType
 {
