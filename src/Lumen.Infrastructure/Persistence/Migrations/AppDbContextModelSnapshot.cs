@@ -22,6 +22,46 @@ namespace Lumen.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Lumen.Infrastructure.Persistence.Entities.DocumentChunkEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CharEnd")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CharStart")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ChunkIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ChunkType")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("TokenCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("DocumentId", "ChunkIndex");
+
+                    b.ToTable("DocumentChunks", (string)null);
+                });
+
             modelBuilder.Entity("Lumen.Infrastructure.Persistence.Entities.DocumentEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -31,6 +71,14 @@ namespace Lumen.Infrastructure.Persistence.Migrations
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateOnly>("FilingDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("RawFilePath")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -92,6 +140,15 @@ namespace Lumen.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId");
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("Lumen.Infrastructure.Persistence.Entities.DocumentChunkEntity", b =>
+                {
+                    b.HasOne("Lumen.Infrastructure.Persistence.Entities.DocumentEntity", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Lumen.Infrastructure.Persistence.Entities.DocumentEntity", b =>

@@ -1,5 +1,3 @@
-using Lumen.Api.Extensions;
-
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddLumenServices();

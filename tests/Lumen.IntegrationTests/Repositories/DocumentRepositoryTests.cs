@@ -15,9 +15,9 @@ public class DocumentRepositoryTests(PostgresFixture fixture)
         context.Tenants.Add(new TenantEntity { Id = tenantId, Name = "Repository test tenant" });
 
         var repository = new DocumentRepository(context, Mapper);
-        var unitOfWork = new UnitOfWork(context, repository);
+        var unitOfWork = new UnitOfWork(context, repository, new DocumentChunkRepository(context, Mapper));
 
-        var document = new Document { Id = Guid.NewGuid(), Title = "Persisted?", Content = "It should be." };
+        var document = new Document { Id = Guid.NewGuid(), Title = "Persisted?", Content = "It should be.", RawFilePath = "persisted.htm", FilingDate = new DateOnly(2025, 1, 1) };
         unitOfWork.Documents.Add(document);
         await unitOfWork.CompleteAsync();
 

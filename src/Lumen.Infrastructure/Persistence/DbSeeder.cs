@@ -39,7 +39,15 @@ public static class DbSeeder
                 new User { Id = user.Id, TenantId = tenantId, Email = adminEmail, Role = Role.Admin }, "Passw0rd!");
             context.Users.Add(user);
 
-            context.Documents.Add(new DocumentEntity { Id = Guid.NewGuid(), Title = documentTitle, Content = documentContent });
+            var documentId = Guid.NewGuid();
+            context.Documents.Add(new DocumentEntity
+            {
+                Id = documentId,
+                Title = documentTitle,
+                Content = documentContent,
+                RawFilePath = $"{tenantId}/{documentId}.htm",
+                FilingDate = DateOnly.FromDateTime(DateTime.UtcNow)
+            });
 
             await context.SaveChangesAsync();
         });
