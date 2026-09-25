@@ -8,6 +8,7 @@ global using Lumen.Infrastructure.Repositories;
 global using Lumen.Infrastructure.Tenancy;
 global using Lumen.IntegrationTests.Utils;
 global using Lumen.Infrastructure.DependencyInjection;
+global using Lumen.Infrastructure.Constants;
 
 global using Microsoft.AspNetCore.Identity;
 global using Microsoft.AspNetCore.Mvc.Testing;
@@ -20,5 +21,7 @@ global using System.Net;
 global using System.Net.Http.Headers;
 global using System.Net.Http.Json;
 global using System.Diagnostics;
+global using System.Text;
 
 global using AutoMapper;
+global using Pgvector;

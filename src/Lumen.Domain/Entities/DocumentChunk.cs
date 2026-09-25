@@ -11,4 +11,6 @@ public class DocumentChunk
     public int CharStart { get; set; }
     public int CharEnd { get; set; }
     public ChunkType ChunkType { get; set; }
+    public float[] Embedding { get; set; } = [];
+    public string EmbeddingModel { get; set; } = string.Empty;
 }

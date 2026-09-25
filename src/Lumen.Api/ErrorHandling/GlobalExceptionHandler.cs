@@ -20,10 +20,11 @@ public class GlobalExceptionHandler : IExceptionHandler
             ConflictException => (StatusCodes.Status409Conflict, exception.Message),
             ValidationException => (StatusCodes.Status400BadRequest, exception.Message),
             UnauthorizedException => (StatusCodes.Status401Unauthorized, exception.Message),
+            ExternalServiceException => (StatusCodes.Status503ServiceUnavailable, "A dependency of this service is unavailable."),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 
-        if (status == StatusCodes.Status500InternalServerError)
+        if (status is StatusCodes.Status500InternalServerError or StatusCodes.Status503ServiceUnavailable)
         {
             _logger.LogError(exception, "Unhandled exception for {Method} {Path}",
                 httpContext.Request.Method, httpContext.Request.Path);

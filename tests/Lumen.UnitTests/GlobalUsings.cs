@@ -13,6 +13,7 @@ global using Lumen.Infrastructure.Mapping;
 global using Lumen.Infrastructure.Storage;
 global using Lumen.Infrastructure.Chunking;
 global using Lumen.Application.Documents.Queries;
+global using Lumen.Infrastructure.Embeddings;
 
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.AspNetCore.Http;

@@ -17,6 +17,7 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentTenant _currentTenant;
     private readonly ITenantLookupService _tenantLookup;
+    private readonly IEmbeddingService _embeddings;
 
     public UploadDocumentCommandHandler(
         IDocumentReaderFactory readerFactory,
@@ -24,7 +25,8 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
         IFileStorage fileStorage,
         IUnitOfWork unitOfWork,
         ICurrentTenant currentTenant,
-        ITenantLookupService tenantLookup)
+        ITenantLookupService tenantLookup,
+        IEmbeddingService embeddings)
     {
         _readerFactory = readerFactory;
         _chunker = chunker;
@@ -32,6 +34,7 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
         _unitOfWork = unitOfWork;
         _currentTenant = currentTenant;
         _tenantLookup = tenantLookup;
+        _embeddings = embeddings;
     }
 
     public async Task<UploadDocumentResult> Handle(UploadDocumentCommand request, CancellationToken ct)
@@ -42,6 +45,8 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
 
         var documentId = Guid.NewGuid();
         var chunks = _chunker.Chunk(documentId, elements);
+        await EmbedAsync(chunks, ct);
+
         var rawFilePath = await SaveRawFileAsync(request, documentId, bytes, ct);
 
         var document = BuildDocument(request, documentId, elements, rawFilePath);
@@ -49,6 +54,37 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
 
         await _unitOfWork.CompleteAsync(ct);
         return new UploadDocumentResult(document, chunks.Count);
+    }
+
+    // Embedding runs before the raw file is written so a provider failure cannot orphan a file on disk.
+    private async Task EmbedAsync(List<DocumentChunk> chunks, CancellationToken ct)
+    {
+        if (chunks.Count == 0)
+        {
+            return;
+        }
+
+        IReadOnlyList<float[]> vectors;
+        try
+        {
+            vectors = await _embeddings.EmbedAsync(chunks.Select(c => c.Text).ToList(), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new ExternalServiceException("Generating embeddings for the uploaded document failed.", ex);
+        }
+
+        if (vectors.Count != chunks.Count)
+        {
+            throw new ExternalServiceException(
+                $"The embedding service returned {vectors.Count} vectors for {chunks.Count} chunks.");
+        }
+
+        for (var i = 0; i < chunks.Count; i++)
+        {
+            chunks[i].Embedding = vectors[i];
+            chunks[i].EmbeddingModel = _embeddings.ModelName;
+        }
     }
 
     private IDocumentReader GetReader(string fileName)

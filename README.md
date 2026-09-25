@@ -86,6 +86,7 @@ erDiagram
 - Global exception handling via `IExceptionHandler` mapping domain exceptions to `ProblemDetails` responses.
 - Seed data on startup (Development only): two tenants with one admin user and one document each, so the API is usable out of the box.
 - 23/23 tests passing (11 unit, 12 integration) — including two independent tenant-isolation tests: one at the EF Core level, one a full HTTP round-trip through `WebApplicationFactory` with real issued JWTs.
+- **Stage 3 addition:** `POST /api/search` — embeds the query text (Azure OpenAI, or a deterministic no-network fake for local dev) and runs a hand-written cosine-distance query against pgvector-stored chunk embeddings, tenant-scoped by hand in raw SQL rather than through EF Core's global filter (a non-composable vector query can't use it). A `DECISIONS.md` entry follows once hands-on testing confirms the numbers (see `.research/stage-3/user-checklist.md`).
 
 ### Dependencies
 
@@ -106,7 +107,7 @@ Exact versions live in each project's `.csproj`.
 **Run:**
 
 ```bash
-docker compose up -d
+docker compose up -d # runs pgvector/pgvector:pg17, pulled on first run
 dotnet run --project src/Lumen.Api
 ```
 

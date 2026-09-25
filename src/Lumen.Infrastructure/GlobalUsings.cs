@@ -13,10 +13,12 @@ global using Lumen.Infrastructure.Chunking;
 global using Lumen.Infrastructure.DocumentReading;
 global using Lumen.Infrastructure.Repositories;
 global using Lumen.Infrastructure.Storage;
+global using Lumen.Infrastructure.Embeddings;
 
 global using Microsoft.AspNetCore.Identity;
 global using Microsoft.EntityFrameworkCore;
 global using Microsoft.EntityFrameworkCore.Metadata.Builders;
+global using Microsoft.Extensions.AI;
 global using Microsoft.Extensions.Options;
 global using Microsoft.IdentityModel.Tokens;
 global using Microsoft.AspNetCore.StaticFiles;
@@ -28,3 +30,4 @@ global using System.IdentityModel.Tokens.Jwt;
 global using System.Security.Claims;
 
 global using AutoMapper;
+global using Pgvector;

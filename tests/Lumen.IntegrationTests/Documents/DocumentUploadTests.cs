@@ -167,4 +167,24 @@ public class DocumentUploadTests(PostgresFixture fixture) : IAsyncLifetime
         var withById = await _client.GetFromJsonAsync<DocumentDto>($"/api/documents/{uploaded.Id}?includeContent=true");
         Assert.Contains("Hello content.", withById!.Content);
     }
+
+    [Fact]
+    public async Task Uploaded_chunks_all_carry_an_embedding_and_the_model_name()
+    {
+        using var form = BuildForm("<html><body><h1>Title</h1><p>Some prose about the business.</p></body></html>"u8.ToArray(), "test.htm", "text/html");
+
+        var uploadResponse = await _client.PostAsync("/api/documents/upload", form);
+        Assert.Equal(HttpStatusCode.Created, uploadResponse.StatusCode);
+        var uploaded = await uploadResponse.Content.ReadFromJsonAsync<DocumentDto>();
+
+        await using var context = TestDbContextFactory.Create(fixture.ConnectionString, _tenantId);
+        var chunks = await context.DocumentChunks.Where(c => c.DocumentId == uploaded!.Id).ToListAsync();
+
+        Assert.NotEmpty(chunks);
+        Assert.All(chunks, c =>
+        {
+            Assert.Equal(1536, c.Embedding.ToArray().Length);
+            Assert.Equal("fake-1536", c.EmbeddingModel);
+        });
+    }
 }

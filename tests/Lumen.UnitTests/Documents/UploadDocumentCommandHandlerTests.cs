@@ -12,6 +12,7 @@ public class UploadDocumentCommandHandlerTests
     private readonly Mock<IDocumentChunkRepository> _chunkRepository = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<ITenantLookupService> _tenantLookup = new();
+    private readonly Mock<IEmbeddingService> _embeddings = new();
 
     public UploadDocumentCommandHandlerTests()
     {
@@ -20,10 +21,14 @@ public class UploadDocumentCommandHandlerTests
         _readerFactory.Setup(f => f.GetReader(It.IsAny<string>())).Returns(_reader.Object);
         _unitOfWork.SetupGet(u => u.Documents).Returns(_documentRepository.Object);
         _unitOfWork.SetupGet(u => u.Chunks).Returns(_chunkRepository.Object);
+        _embeddings.SetupGet(e => e.ModelName).Returns("fake-1536");
+        _embeddings.Setup(e => e.EmbedAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .Returns<IReadOnlyList<string>, CancellationToken>((texts, _) =>
+                Task.FromResult<IReadOnlyList<float[]>>(texts.Select(_ => new float[1536]).ToList()));
     }
 
     private UploadDocumentCommandHandler CreateHandler() =>
-        new(_readerFactory.Object, _chunker.Object, _fileStorage.Object, _unitOfWork.Object, _currentTenant.Object, _tenantLookup.Object);
+        new(_readerFactory.Object, _chunker.Object, _fileStorage.Object, _unitOfWork.Object, _currentTenant.Object, _tenantLookup.Object, _embeddings.Object);
 
     [Fact]
     public async Task Handle_reads_chunks_stores_the_file_and_persists_the_document()
@@ -116,6 +121,73 @@ public class UploadDocumentCommandHandlerTests
 
         Assert.Contains("broken.pdf", ex.Message);
         _fileStorage.Verify(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(u => u.CompleteAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_embeds_every_chunk_and_records_the_model_name()
+    {
+        var elements = new List<DocumentElement> { new() { Type = ElementType.Paragraph, Text = "Some cleaned text." } };
+        _reader.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(elements);
+
+        var chunks = new List<DocumentChunk>
+        {
+            new() { Id = Guid.NewGuid(), ChunkIndex = 0, Text = "First chunk", TokenCount = 2, ChunkType = ChunkType.Prose },
+            new() { Id = Guid.NewGuid(), ChunkIndex = 1, Text = "Second chunk", TokenCount = 2, ChunkType = ChunkType.Prose }
+        };
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements)).Returns(chunks);
+        _fileStorage.Setup(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("path.htm");
+
+        using var content = new MemoryStream();
+        await CreateHandler().Handle(new UploadDocumentCommand("filing.htm", content, "Filing", new DateOnly(2025, 1, 1)), CancellationToken.None);
+
+        _embeddings.Verify(e => e.EmbedAsync(
+            It.Is<IReadOnlyList<string>>(t => t.Count == 2 && t[0] == "First chunk" && t[1] == "Second chunk"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        Assert.All(chunks, c =>
+        {
+            Assert.Equal(1536, c.Embedding.Length);
+            Assert.Equal("fake-1536", c.EmbeddingModel);
+        });
+    }
+
+    [Fact]
+    public async Task Handle_persists_nothing_when_the_embedding_service_fails()
+    {
+        var elements = new List<DocumentElement> { new() { Type = ElementType.Paragraph, Text = "Some cleaned text." } };
+        _reader.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(elements);
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements)).Returns(
+            [new DocumentChunk { Id = Guid.NewGuid(), ChunkIndex = 0, Text = "Chunk", TokenCount = 1, ChunkType = ChunkType.Prose }]);
+        _embeddings.Setup(e => e.EmbedAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("429 Too Many Requests"));
+
+        using var content = new MemoryStream();
+        var command = new UploadDocumentCommand("filing.htm", content, "Filing", new DateOnly(2025, 1, 1));
+
+        await Assert.ThrowsAsync<ExternalServiceException>(() => CreateHandler().Handle(command, CancellationToken.None));
+
+        _fileStorage.Verify(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(u => u.CompleteAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_fails_when_the_embedding_service_returns_the_wrong_number_of_vectors()
+    {
+        var elements = new List<DocumentElement> { new() { Type = ElementType.Paragraph, Text = "Text." } };
+        _reader.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(elements);
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements)).Returns(
+        [
+            new DocumentChunk { Id = Guid.NewGuid(), ChunkIndex = 0, Text = "A", TokenCount = 1, ChunkType = ChunkType.Prose },
+            new DocumentChunk { Id = Guid.NewGuid(), ChunkIndex = 1, Text = "B", TokenCount = 1, ChunkType = ChunkType.Prose }
+        ]);
+        _embeddings.Setup(e => e.EmbedAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new float[1536]]);
+
+        using var content = new MemoryStream();
+        var command = new UploadDocumentCommand("filing.htm", content, "Filing", new DateOnly(2025, 1, 1));
+
+        await Assert.ThrowsAsync<ExternalServiceException>(() => CreateHandler().Handle(command, CancellationToken.None));
         _unitOfWork.Verify(u => u.CompleteAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 }
