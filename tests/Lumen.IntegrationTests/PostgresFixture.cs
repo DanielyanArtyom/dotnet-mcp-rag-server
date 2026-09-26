@@ -4,8 +4,7 @@ namespace Lumen.IntegrationTests;
 
 public class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:pg17")
         .WithDatabase("lumen_test")
         .WithUsername("postgres")
         .WithPassword("postgres")

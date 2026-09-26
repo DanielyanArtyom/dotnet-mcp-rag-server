@@ -58,4 +58,19 @@ public class GlobalExceptionHandlerTests
         Assert.DoesNotContain("some internal detail that must not leak", body);
         Assert.Contains("An unexpected error occurred.", body);
     }
+
+    [Fact]
+    public async Task Maps_ExternalServiceException_to_503_without_leaking_the_message()
+    {
+        var context = CreateContext();
+
+        var handled = await CreateHandler().TryHandleAsync(context, new ExternalServiceException("https://lumen.openai.azure.com returned 401"), CancellationToken.None);
+
+        Assert.True(handled);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+
+        var body = await ReadBodyAsync(context);
+        Assert.Contains("A dependency of this service is unavailable.", body);
+        Assert.DoesNotContain("lumen.openai.azure.com", body);
+    }
 }

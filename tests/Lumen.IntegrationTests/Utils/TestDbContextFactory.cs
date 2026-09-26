@@ -1,3 +1,5 @@
+using Pgvector.EntityFrameworkCore;
+
 namespace Lumen.IntegrationTests.Utils;
 
 public static class TestDbContextFactory
@@ -5,7 +7,7 @@ public static class TestDbContextFactory
     public static DbContextOptions<AppDbContext> BuildOptions(string connectionString)
     {
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-        optionsBuilder.UseNpgsql(connectionString);
+        optionsBuilder.UseNpgsql(connectionString, o => o.UseVector());
         return optionsBuilder.Options;
     }
 

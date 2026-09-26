@@ -1,3 +1,6 @@
+using Pgvector.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
 namespace Lumen.Api.Extensions;
 
 public static class WebApplicationBuilderExtensions
@@ -12,9 +15,13 @@ public static class WebApplicationBuilderExtensions
                 o.RootPath = Path.Combine(builder.Environment.ContentRootPath, o.RootPath);
         });
         builder.Services.Configure<ChunkingOptions>(builder.Configuration.GetSection(ChunkingOptions.SectionName));
+        builder.Services.AddOptions<EmbeddingOptions>()
+            .Bind(builder.Configuration.GetSection(EmbeddingOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<EmbeddingOptions>, EmbeddingOptionsValidator>();
 
         builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+            options.UseNpgsql(builder.Configuration.GetConnectionString("Default"), o => o.UseVector()));
 
         builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(LoginCommand).Assembly));
 

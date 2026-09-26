@@ -11,4 +11,6 @@ public class DocumentChunkEntity : ITenantEntity
     public int CharStart { get; set; }
     public int CharEnd { get; set; }
     public ChunkType ChunkType { get; set; }
+    public Vector Embedding { get; set; } = default!;
+    public string EmbeddingModel { get; set; } = default!;
 }

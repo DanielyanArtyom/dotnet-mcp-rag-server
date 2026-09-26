@@ -10,6 +10,10 @@ public class DocumentChunkEntityConfiguration : IEntityTypeConfiguration<Documen
         builder.HasIndex(c => c.TenantId);
         builder.HasIndex(c => new { c.DocumentId, c.ChunkIndex });
 
+        builder.Property(c => c.Embedding).HasColumnType($"vector({EmbeddingConstants.Dimensions})").IsRequired();
+        builder.Property(c => c.EmbeddingModel).IsRequired().HasMaxLength(100);
+        builder.HasIndex(c => new { c.TenantId, c.EmbeddingModel });
+
         builder.HasOne<DocumentEntity>()
             .WithMany()
             .HasForeignKey(c => c.DocumentId)

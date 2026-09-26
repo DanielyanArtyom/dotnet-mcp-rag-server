@@ -22,9 +22,9 @@ public class DocumentChunkRepositoryTests(PostgresFixture fixture)
         var repository = new DocumentChunkRepository(context, Mapper);
         var unitOfWork = new UnitOfWork(context, new DocumentRepository(context, Mapper), repository);
 
-        unitOfWork.Chunks.Add(new DocumentChunk { Id = Guid.NewGuid(), DocumentId = documentId, ChunkIndex = 1, Text = "second", TokenCount = 1, CharStart = 10, CharEnd = 16, ChunkType = ChunkType.Prose });
-        unitOfWork.Chunks.Add(new DocumentChunk { Id = Guid.NewGuid(), DocumentId = documentId, ChunkIndex = 0, Text = "first", TokenCount = 1, CharStart = 0, CharEnd = 5, ChunkType = ChunkType.Prose });
-        unitOfWork.Chunks.Add(new DocumentChunk { Id = Guid.NewGuid(), DocumentId = otherDocumentId, ChunkIndex = 0, Text = "other doc", TokenCount = 2, CharStart = 0, CharEnd = 9, ChunkType = ChunkType.Prose });
+        unitOfWork.Chunks.Add(new DocumentChunk { Id = Guid.NewGuid(), DocumentId = documentId, ChunkIndex = 1, Text = "second", TokenCount = 1, CharStart = 10, CharEnd = 16, ChunkType = ChunkType.Prose, Embedding = TestVectors.OneHot(1), EmbeddingModel = "fake-1536" });
+        unitOfWork.Chunks.Add(new DocumentChunk { Id = Guid.NewGuid(), DocumentId = documentId, ChunkIndex = 0, Text = "first", TokenCount = 1, CharStart = 0, CharEnd = 5, ChunkType = ChunkType.Prose, Embedding = TestVectors.OneHot(0), EmbeddingModel = "fake-1536" });
+        unitOfWork.Chunks.Add(new DocumentChunk { Id = Guid.NewGuid(), DocumentId = otherDocumentId, ChunkIndex = 0, Text = "other doc", TokenCount = 2, CharStart = 0, CharEnd = 9, ChunkType = ChunkType.Prose, Embedding = TestVectors.OneHot(2), EmbeddingModel = "fake-1536" });
         await unitOfWork.CompleteAsync();
 
         var chunks = await unitOfWork.Chunks.GetByDocumentIdAsync(documentId);

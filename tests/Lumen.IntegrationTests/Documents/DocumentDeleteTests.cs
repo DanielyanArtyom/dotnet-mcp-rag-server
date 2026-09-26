@@ -105,4 +105,21 @@ public class DocumentDeleteTests(PostgresFixture fixture) : IAsyncLifetime
 
         Assert.True(File.Exists(RawFilePath(id)));
     }
+
+    [Fact]
+    public async Task Deleting_a_document_removes_its_vectors_from_search()
+    {
+        var documentId = await UploadAsync();
+
+        var before = await (await _admin.PostAsJsonAsync("/api/search", new { query = "Some prose about the business.", topK = 10 }))
+            .Content.ReadFromJsonAsync<List<SearchResultDto>>();
+        Assert.Contains(before!, r => r.DocumentId == documentId);
+
+        var delete = await _admin.DeleteAsync($"/api/documents/{documentId}");
+        Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
+
+        var after = await (await _admin.PostAsJsonAsync("/api/search", new { query = "Some prose about the business.", topK = 10 }))
+            .Content.ReadFromJsonAsync<List<SearchResultDto>>();
+        Assert.DoesNotContain(after!, r => r.DocumentId == documentId);
+    }
 }

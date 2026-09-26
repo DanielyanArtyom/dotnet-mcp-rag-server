@@ -3,7 +3,7 @@ namespace Lumen.IntegrationTests.Persistence;
 [Collection("Postgres collection")]
 public class DocumentChunkTenantIsolationDbContextTests(PostgresFixture fixture)
 {
-    private async Task SeedTenantWithChunkAsync(Guid tenantId, string name, string chunkText)
+    private async Task SeedTenantWithChunkAsync(Guid tenantId, string name, string chunkText, int oneHotIndex)
     {
         await using var context = TestDbContextFactory.Create(fixture.ConnectionString, tenantId);
         context.Tenants.Add(new TenantEntity { Id = tenantId, Name = name });
@@ -27,7 +27,9 @@ public class DocumentChunkTenantIsolationDbContextTests(PostgresFixture fixture)
             TokenCount = 3,
             CharStart = 0,
             CharEnd = chunkText.Length,
-            ChunkType = ChunkType.Prose
+            ChunkType = ChunkType.Prose,
+            Embedding = new Vector(TestVectors.OneHot(oneHotIndex)),
+            EmbeddingModel = "fake-1536"
         });
         await context.SaveChangesAsync();
     }
@@ -38,8 +40,8 @@ public class DocumentChunkTenantIsolationDbContextTests(PostgresFixture fixture)
         var tenantAId = Guid.NewGuid();
         var tenantBId = Guid.NewGuid();
 
-        await SeedTenantWithChunkAsync(tenantAId, "Tenant A", "belongs to A");
-        await SeedTenantWithChunkAsync(tenantBId, "Tenant B", "belongs to B");
+        await SeedTenantWithChunkAsync(tenantAId, "Tenant A", "belongs to A", oneHotIndex: 0);
+        await SeedTenantWithChunkAsync(tenantBId, "Tenant B", "belongs to B", oneHotIndex: 1);
 
         await using var contextAsTenantA = TestDbContextFactory.Create(fixture.ConnectionString, tenantAId);
         var visibleToA = await contextAsTenantA.DocumentChunks.ToListAsync();
