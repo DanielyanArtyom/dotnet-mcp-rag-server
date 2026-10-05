@@ -1,5 +1,4 @@
 using Pgvector.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace Lumen.Api.Extensions;
 
@@ -19,6 +18,10 @@ public static class WebApplicationBuilderExtensions
             .Bind(builder.Configuration.GetSection(EmbeddingOptions.SectionName))
             .ValidateOnStart();
         builder.Services.AddSingleton<IValidateOptions<EmbeddingOptions>, EmbeddingOptionsValidator>();
+        builder.Services.AddOptions<ChatSettingsOptions>()
+            .Bind(builder.Configuration.GetSection(ChatSettingsOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<ChatSettingsOptions>, ChatSettingsOptionsValidator>();
 
         builder.Services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(builder.Configuration.GetConnectionString("Default"), o => o.UseVector()));

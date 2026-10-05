@@ -1,5 +1,4 @@
 using Lumen.Application.Search;
-using Lumen.Domain.Models;
 
 namespace Lumen.UnitTests.Search;
 

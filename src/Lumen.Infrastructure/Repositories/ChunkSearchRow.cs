@@ -5,6 +5,7 @@ public class ChunkSearchRow
     public Guid ChunkId { get; set; }
     public Guid DocumentId { get; set; }
     public string DocumentTitle { get; set; } = default!;
+    public DateOnly DocumentFilingDate { get; set; }
     public int ChunkIndex { get; set; }
     public int ChunkType { get; set; }
     public int TokenCount { get; set; }

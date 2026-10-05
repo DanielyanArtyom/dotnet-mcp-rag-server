@@ -35,6 +35,7 @@
     <ProjectReference Include="..\..\src\Lumen.Infrastructure\Lumen.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Lumen.Application\Lumen.Application.csproj" />
     <ProjectReference Include="..\..\src\Lumen.Domain\Lumen.Domain.csproj" />
+    <ProjectReference Include="..\..\tools\Lumen.Eval\Lumen.Eval.csproj" />
   </ItemGroup>
 
 </Project>

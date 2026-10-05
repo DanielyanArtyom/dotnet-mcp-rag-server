@@ -1,4 +1,3 @@
-using Lumen.Domain.Models;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -13,6 +12,7 @@ public class ChunkSearchRepository : IChunkSearchRepository
         SELECT c."Id" AS "ChunkId",
                c."DocumentId",
                d."Title" AS "DocumentTitle",
+               d."FilingDate" AS "DocumentFilingDate",
                c."ChunkIndex",
                c."ChunkType",
                c."TokenCount",
@@ -61,6 +61,7 @@ public class ChunkSearchRepository : IChunkSearchRepository
             ChunkId = r.ChunkId,
             DocumentId = r.DocumentId,
             DocumentTitle = r.DocumentTitle,
+            DocumentFilingDate = r.DocumentFilingDate,
             ChunkIndex = r.ChunkIndex,
             ChunkType = (ChunkType)r.ChunkType,
             TokenCount = r.TokenCount,

@@ -1,5 +1,3 @@
-using Lumen.Infrastructure.Constants;
-
 namespace Lumen.UnitTests.Embeddings;
 
 public class FakeEmbeddingServiceTests
