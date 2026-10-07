@@ -10,6 +10,7 @@ public class DocumentEntityConfiguration : IEntityTypeConfiguration<DocumentEnti
         builder.Property(d => d.Content).IsRequired();
         builder.Property(d => d.RawFilePath).IsRequired().HasMaxLength(1000);
         builder.Property(d => d.FilingDate).IsRequired();
+        builder.Property(d => d.IngestProfile).HasMaxLength(200);
         builder.HasIndex(d => d.TenantId);
         builder.HasOne<TenantEntity>()
             .WithMany()

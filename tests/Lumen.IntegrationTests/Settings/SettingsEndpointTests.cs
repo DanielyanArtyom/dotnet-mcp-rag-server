@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Lumen.IntegrationTests.Settings;
 
 [Collection("Postgres collection")]
@@ -41,7 +39,7 @@ public class SettingsEndpointTests(PostgresFixture fixture) : IAsyncLifetime
         var root = json.RootElement;
         Assert.Equal("Fake", root.GetProperty("chat").GetProperty("provider").GetString());
         Assert.Equal(ChatConstants.FakeModelName, root.GetProperty("chat").GetProperty("deployment").GetString());
-        Assert.Equal(5, root.GetProperty("chat").GetProperty("contextTopK").GetInt32());
+        Assert.Equal(10, root.GetProperty("chat").GetProperty("contextTopK").GetInt32());
         Assert.Equal("Fake", root.GetProperty("embeddings").GetProperty("provider").GetString());
         Assert.Equal(EmbeddingConstants.FakeModelName, root.GetProperty("embeddings").GetProperty("model").GetString());
         Assert.Equal(250, root.GetProperty("chunking").GetProperty("maxTokensPerChunk").GetInt32());

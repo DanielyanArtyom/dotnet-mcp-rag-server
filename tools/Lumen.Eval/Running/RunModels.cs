@@ -20,6 +20,10 @@ public class TenantCredentials
     public string Password { get; set; } = default!;
 }
 
+public record CorpusDocument(string Tenant, string Title, string? IngestProfile, int ChunkCount);
+
+public record SourceRecord(int Rank, Guid ChunkId, Guid DocumentId, int ChunkIndex, string ChunkType, double Distance, double? Score, string TextPreview);
+
 public class QuestionResult
 {
     public string Id { get; set; } = default!;
@@ -41,6 +45,7 @@ public class QuestionResult
     public int ReasoningTokens { get; set; }
     public long LatencyMs { get; set; }
     public long? ServerTotalMs { get; set; }
+    public List<SourceRecord> Sources { get; set; } = [];
 }
 
 public class RunHeader
@@ -54,6 +59,8 @@ public class RunHeader
     public int Repeat { get; set; }
     public bool Holdout { get; set; }
     public JsonElement ServerSettings { get; set; }
+    public string? IngestProfile { get; set; }
+    public List<CorpusDocument> Corpus { get; set; } = [];
     public List<string> Unlabelable { get; set; } = [];
     public Dictionary<string, int> BroadAnchors { get; set; } = [];
     public string? JudgeDeployment { get; set; }

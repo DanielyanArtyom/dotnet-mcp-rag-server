@@ -8,4 +8,5 @@ public class DocumentEntity : ITenantEntity
     public string Content { get; set; } = default!;
     public string RawFilePath { get; set; } = default!;
     public DateOnly FilingDate { get; set; }
+    public string? IngestProfile { get; set; }
 }

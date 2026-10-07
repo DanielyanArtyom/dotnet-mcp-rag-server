@@ -49,6 +49,19 @@ public class ConsoleReportTests
         Assert.Contains("  unlabelable", RowsOnly(number));
     }
 
+    [Fact]
+    public void The_header_prints_the_ingest_profile_and_the_corpus()
+    {
+        var header = Header(RunMode.Retrieval, "{}");
+        header.IngestProfile = "p1";
+        header.Corpus = [new CorpusDocument("acme", "Own", "p1", 1)];
+
+        var output = Print(header, Result(ExpectedKind.Number, true));
+
+        Assert.Contains("ingest profile: p1", output);
+        Assert.Contains(output.Split('\n'), l => l.Contains("Own") && l.Contains("1 chunks"));
+    }
+
     private static string RowsOnly(string output) =>
         string.Join('\n', output.Split('\n').Where(l => l.StartsWith("q1")));
 }

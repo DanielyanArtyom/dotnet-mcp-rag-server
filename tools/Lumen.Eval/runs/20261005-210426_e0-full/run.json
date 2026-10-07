@@ -1,0 +1,44 @@
+{
+  "label": "e0-full",
+  "mode": "full",
+  "startedAt": "2026-10-05T21:04:26.889468+04:00",
+  "gitCommit": "0639d78-dirty",
+  "evalSetPath": "eval-set.json",
+  "evalSetSha256": "158f8425bbbf0ba031feaa53b1f2a8c0288fca2849b5cc3a5581c36b3bd0549e",
+  "repeat": 1,
+  "holdout": false,
+  "serverSettings": {
+    "chat": {
+      "provider": "AzureOpenAI",
+      "deployment": "gpt-4o",
+      "temperature": 0.2,
+      "topP": null,
+      "reasoningEffort": null,
+      "maxOutputTokens": 1024,
+      "contextTopK": 5
+    },
+    "embeddings": {
+      "provider": "AzureOpenAI",
+      "model": "text-embedding-3-small"
+    },
+    "chunking": {
+      "maxTokensPerChunk": 250,
+      "overlapTokens": 60
+    },
+    "searchMode": "vector",
+    "promptHash": "ae0bb62cae85"
+  },
+  "unlabelable": [],
+  "broadAnchors": {
+    "a-net-sales-fy25": 6,
+    "g-net-income-2025": 15,
+    "g-cet1-2025": 9,
+    "g-nii-6m-26": 7,
+    "g-apple-card-allowance": 10,
+    "g-tbvps-delta": 6
+  },
+  "judgeDeployment": "gpt-5-mini",
+  "judgeInputTokens": 541,
+  "judgeOutputTokens": 313,
+  "abortReason": null
+}

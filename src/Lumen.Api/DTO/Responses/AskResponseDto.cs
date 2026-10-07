@@ -20,6 +20,7 @@ public class AskSourceDto
     public string ChunkType { get; set; } = default!;
     public int TokenCount { get; set; }
     public double Distance { get; set; }
+    public double? Score { get; set; }
     public bool Cited { get; set; }
     public string Text { get; set; } = default!;
 }

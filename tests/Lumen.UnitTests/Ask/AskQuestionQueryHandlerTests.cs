@@ -16,7 +16,7 @@ public class AskQuestionQueryHandlerTests
     }
 
     private void Found(params string[] texts) =>
-        _chunks.Setup(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _chunks.Setup(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(texts.Select((t, i) => new ChunkSearchResult
             {
                 ChunkId = Guid.NewGuid(), DocumentId = Guid.NewGuid(), DocumentTitle = "Apple 10-K", DocumentFilingDate = new DateOnly(2023, 10, 27),
@@ -34,7 +34,7 @@ public class AskQuestionQueryHandlerTests
 
         var answer = await CreateHandler().Handle(new AskQuestionQuery("What were net sales?", documentId, 7), CancellationToken.None);
 
-        _chunks.Verify(r => r.SearchAsync(It.IsAny<float[]>(), "fake-1536", 7, documentId, It.IsAny<CancellationToken>()), Times.Once);
+        _chunks.Verify(r => r.SearchAsync(It.IsAny<float[]>(), "What were net sales?", "fake-1536", 7, documentId, It.IsAny<CancellationToken>()), Times.Once);
         _chat.Verify(c => c.CompleteAsync(PromptConstants.SystemPrompt, It.Is<string>(u => u.Contains("Total net sales 416,161") && u.Contains("What were net sales?")), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("Net sales were $416,161 million [1].", answer.Answer);
         Assert.False(answer.Refused);
@@ -130,6 +130,6 @@ public class AskQuestionQueryHandlerTests
         await Assert.ThrowsAsync<ExternalServiceException>(
             () => CreateHandler().Handle(new AskQuestionQuery("q", null, 5), CancellationToken.None));
 
-        _chunks.Verify(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _chunks.Verify(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

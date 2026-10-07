@@ -12,7 +12,7 @@ public class SearchChunksQueryHandlerTests
         _embeddings.SetupGet(e => e.ModelName).Returns("fake-1536");
         _embeddings.Setup(e => e.EmbedAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new float[1536]]);
-        _repository.Setup(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
     }
 
@@ -26,7 +26,7 @@ public class SearchChunksQueryHandlerTests
         await CreateHandler().Handle(new SearchChunksQuery("net sales", 7, documentId), CancellationToken.None);
 
         _embeddings.Verify(e => e.EmbedAsync(It.Is<IReadOnlyList<string>>(t => t.Count == 1 && t[0] == "net sales"), It.IsAny<CancellationToken>()), Times.Once);
-        _repository.Verify(r => r.SearchAsync(It.IsAny<float[]>(), "fake-1536", 7, documentId, It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.SearchAsync(It.IsAny<float[]>(), "net sales", "fake-1536", 7, documentId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -47,7 +47,7 @@ public class SearchChunksQueryHandlerTests
         {
             new() { ChunkId = Guid.NewGuid(), DocumentTitle = "Apple 10-K", Text = "Total net sales", Distance = 0.02 }
         };
-        _repository.Setup(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(found);
 
         var results = await CreateHandler().Handle(new SearchChunksQuery("net sales", 5, null), CancellationToken.None);
@@ -64,6 +64,6 @@ public class SearchChunksQueryHandlerTests
         await Assert.ThrowsAsync<ExternalServiceException>(
             () => CreateHandler().Handle(new SearchChunksQuery("net sales", 5, null), CancellationToken.None));
 
-        _repository.Verify(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repository.Verify(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

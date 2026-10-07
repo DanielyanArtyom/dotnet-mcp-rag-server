@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserLookupService, UserLookupService>();
         services.AddScoped<ITenantLookupService, TenantLookupService>();
         services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+        services.AddSingleton<IIngestProfileProvider, IngestProfileProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IDocumentReaderFactory, DocumentReaderFactory>();
         services.AddScoped<IChunker, Chunker>();

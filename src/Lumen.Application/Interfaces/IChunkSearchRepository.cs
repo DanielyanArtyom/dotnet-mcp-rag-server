@@ -4,6 +4,7 @@ public interface IChunkSearchRepository
 {
     Task<List<ChunkSearchResult>> SearchAsync(
         float[] queryEmbedding,
+        string queryText,
         string embeddingModel,
         int topK,
         Guid? documentId,

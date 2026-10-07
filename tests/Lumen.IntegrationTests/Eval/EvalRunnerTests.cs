@@ -108,4 +108,14 @@ public class EvalRunnerTests(PostgresFixture fixture) : IAsyncLifetime
         var trap = outcome.Results.Single(r => r.Id == "globex-trap");
         Assert.NotNull(trap.Correct);
     }
+
+    [Fact]
+    public async Task A_run_against_a_server_with_a_different_profile_is_refused()
+    {
+        using var otherProfile = _factory.WithWebHostBuilder(b => b.UseSetting("Chunking:ProtectDecimals", "true"));
+        var runner = new EvalRunner(new LumenApiClient(otherProfile.CreateClient()), _tenants, judge: null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            runner.RunAsync(Set(), "inline", new string('0', 64), new RunOptions { Mode = RunMode.Retrieval, Label = "t" }, CancellationToken.None));
+    }
 }

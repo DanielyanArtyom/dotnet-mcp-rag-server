@@ -85,7 +85,7 @@ public class AskQuestionQueryHandler : IRequestHandler<AskQuestionQuery, AskAnsw
             throw new ExternalServiceException("Generating an embedding for the question failed.", ex);
         }
 
-        return await _chunks.SearchAsync(vectors[0], _embeddings.ModelName, request.TopK, request.DocumentId, ct);
+        return await _chunks.SearchAsync(vectors[0], request.Question, _embeddings.ModelName, request.TopK, request.DocumentId, ct);
     }
 
     private async Task<GeneratedAnswer> GenerateAsync(string question, IReadOnlyList<ChunkSearchResult> sources, CancellationToken ct)
@@ -139,6 +139,7 @@ public class AskQuestionQueryHandler : IRequestHandler<AskQuestionQuery, AskAnsw
             ChunkType = chunk.ChunkType,
             TokenCount = chunk.TokenCount,
             Distance = chunk.Distance,
+            Score = chunk.Score,
             Cited = cited.Contains(index + 1),
             Text = chunk.Text
         }).ToList();

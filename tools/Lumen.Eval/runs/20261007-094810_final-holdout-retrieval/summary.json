@@ -1,0 +1,57 @@
+{
+  "rows": 5,
+  "retrievalQuestions": 5,
+  "hitAt1": 0,
+  "hitAt3": 0.8,
+  "hitAt5": 0.8,
+  "hitAt10": 0.8,
+  "mrr": 0.3333333333333333,
+  "meanRetrievedTokens": 1205.6,
+  "accuracy": null,
+  "falseAnswerRate": null,
+  "falseRefusalRate": null,
+  "truncatedCount": 0,
+  "grid": {
+    "hitCorrect": 0,
+    "hitWrong": 0,
+    "missCorrect": 0,
+    "missWrong": 0
+  },
+  "latencyP50": 325,
+  "latencyP95": 920,
+  "inputTokens": 0,
+  "outputTokens": 0,
+  "reasoningTokens": 0,
+  "costUsd": null,
+  "repeatFlipRate": null,
+  "byCategory": [
+    {
+      "category": "comparison",
+      "count": 2,
+      "hitAt5": 0.5,
+      "mrr": 0.25,
+      "accuracy": null
+    },
+    {
+      "category": "exact-term",
+      "count": 1,
+      "hitAt5": 1,
+      "mrr": 0.5,
+      "accuracy": null
+    },
+    {
+      "category": "prose",
+      "count": 1,
+      "hitAt5": 1,
+      "mrr": 0.3333333333333333,
+      "accuracy": null
+    },
+    {
+      "category": "table-value",
+      "count": 1,
+      "hitAt5": 1,
+      "mrr": 0.3333333333333333,
+      "accuracy": null
+    }
+  ]
+}

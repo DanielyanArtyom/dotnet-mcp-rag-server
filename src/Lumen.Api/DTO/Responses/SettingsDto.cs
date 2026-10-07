@@ -6,6 +6,8 @@ public class SettingsDto
     public EmbeddingSettingsDto Embeddings { get; set; } = new();
     public ChunkingSettingsDto Chunking { get; set; } = new();
     public string SearchMode { get; set; } = default!;
+    public SearchSettingsDto Search { get; set; } = new();
+    public string IngestProfile { get; set; } = default!;
     public string PromptHash { get; set; } = default!;
 }
 
@@ -30,4 +32,14 @@ public class ChunkingSettingsDto
 {
     public int MaxTokensPerChunk { get; set; }
     public int OverlapTokens { get; set; }
+}
+
+public class SearchSettingsDto
+{
+    public string Mode { get; set; } = default!;
+    public int RrfK { get; set; }
+    public int Candidates { get; set; }
+    public double LexicalWeight { get; set; }
+    public double VectorWeight { get; set; }
+    public int? MaxChunksPerDocument { get; set; }
 }

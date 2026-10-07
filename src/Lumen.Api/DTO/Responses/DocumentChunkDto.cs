@@ -6,6 +6,7 @@ public class DocumentChunkDto
     public string Text { get; set; } = default!;
     public int TokenCount { get; set; }
     public string ChunkType { get; set; } = default!;
+    public string? ContextHeader { get; set; }
     public int CharStart { get; set; }
     public int CharEnd { get; set; }
 }

@@ -13,6 +13,7 @@ public class UploadDocumentCommandHandlerTests
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<ITenantLookupService> _tenantLookup = new();
     private readonly Mock<IEmbeddingService> _embeddings = new();
+    private readonly Mock<IIngestProfileProvider> _ingestProfile = new();
 
     public UploadDocumentCommandHandlerTests()
     {
@@ -21,6 +22,7 @@ public class UploadDocumentCommandHandlerTests
         _readerFactory.Setup(f => f.GetReader(It.IsAny<string>())).Returns(_reader.Object);
         _unitOfWork.SetupGet(u => u.Documents).Returns(_documentRepository.Object);
         _unitOfWork.SetupGet(u => u.Chunks).Returns(_chunkRepository.Object);
+        _ingestProfile.SetupGet(p => p.Current).Returns("chunk=250/60;hdr=off;merge=0;dec=off");
         _embeddings.SetupGet(e => e.ModelName).Returns("fake-1536");
         _embeddings.Setup(e => e.EmbedAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
             .Returns<IReadOnlyList<string>, CancellationToken>((texts, _) =>
@@ -28,7 +30,7 @@ public class UploadDocumentCommandHandlerTests
     }
 
     private UploadDocumentCommandHandler CreateHandler() =>
-        new(_readerFactory.Object, _chunker.Object, _fileStorage.Object, _unitOfWork.Object, _currentTenant.Object, _tenantLookup.Object, _embeddings.Object);
+        new(_readerFactory.Object, _chunker.Object, _fileStorage.Object, _unitOfWork.Object, _currentTenant.Object, _tenantLookup.Object, _embeddings.Object, _ingestProfile.Object);
 
     [Fact]
     public async Task Handle_reads_chunks_stores_the_file_and_persists_the_document()
@@ -37,7 +39,7 @@ public class UploadDocumentCommandHandlerTests
         _reader.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(elements);
 
         var chunks = new List<DocumentChunk> { new() { Id = Guid.NewGuid(), ChunkIndex = 0, Text = "Some cleaned text.", TokenCount = 3, ChunkType = ChunkType.Prose } };
-        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements)).Returns(chunks);
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements, It.IsAny<ChunkingContext>())).Returns(chunks);
 
         _fileStorage.Setup(s => s.SaveAsync(_tenantId, "Acme Corp", It.IsAny<Guid>(), "Apple 10-K FY2025", ".htm", It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync($"{_tenantId}/some-id.htm");
@@ -60,6 +62,21 @@ public class UploadDocumentCommandHandlerTests
     }
 
     [Fact]
+    public async Task Stamps_the_current_ingest_profile_on_the_document()
+    {
+        _reader.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<DocumentElement>());
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), It.IsAny<List<DocumentElement>>(), It.IsAny<ChunkingContext>())).Returns(new List<DocumentChunk>());
+        _fileStorage.Setup(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("path.htm");
+
+        using var content = new MemoryStream();
+        var result = await CreateHandler().Handle(
+            new UploadDocumentCommand("doc.htm", content, "Doc", new DateOnly(2025, 1, 1)), CancellationToken.None);
+
+        Assert.Equal("chunk=250/60;hdr=off;merge=0;dec=off", result.Document.IngestProfile);
+    }
+
+    [Fact]
     public async Task Handle_gives_reader_and_storage_independent_streams_with_the_original_bytes()
     {
         var original = new byte[] { 1, 2, 3, 4, 5 };
@@ -75,7 +92,7 @@ public class UploadDocumentCommandHandlerTests
                 await s.DisposeAsync();
                 return new List<DocumentElement>();
             });
-        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), It.IsAny<List<DocumentElement>>())).Returns(new List<DocumentChunk>());
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), It.IsAny<List<DocumentElement>>(), It.IsAny<ChunkingContext>())).Returns(new List<DocumentChunk>());
         _fileStorage.Setup(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), ".pdf", It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .Returns<Guid, string, Guid, string, string, Stream, CancellationToken>(async (_, _, _, _, _, s, _) =>
             {
@@ -135,7 +152,7 @@ public class UploadDocumentCommandHandlerTests
             new() { Id = Guid.NewGuid(), ChunkIndex = 0, Text = "First chunk", TokenCount = 2, ChunkType = ChunkType.Prose },
             new() { Id = Guid.NewGuid(), ChunkIndex = 1, Text = "Second chunk", TokenCount = 2, ChunkType = ChunkType.Prose }
         };
-        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements)).Returns(chunks);
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements, It.IsAny<ChunkingContext>())).Returns(chunks);
         _fileStorage.Setup(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("path.htm");
 
@@ -157,7 +174,7 @@ public class UploadDocumentCommandHandlerTests
     {
         var elements = new List<DocumentElement> { new() { Type = ElementType.Paragraph, Text = "Some cleaned text." } };
         _reader.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(elements);
-        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements)).Returns(
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements, It.IsAny<ChunkingContext>())).Returns(
             [new DocumentChunk { Id = Guid.NewGuid(), ChunkIndex = 0, Text = "Chunk", TokenCount = 1, ChunkType = ChunkType.Prose }]);
         _embeddings.Setup(e => e.EmbedAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new HttpRequestException("429 Too Many Requests"));
@@ -176,7 +193,7 @@ public class UploadDocumentCommandHandlerTests
     {
         var elements = new List<DocumentElement> { new() { Type = ElementType.Paragraph, Text = "Text." } };
         _reader.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(elements);
-        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements)).Returns(
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements, It.IsAny<ChunkingContext>())).Returns(
         [
             new DocumentChunk { Id = Guid.NewGuid(), ChunkIndex = 0, Text = "A", TokenCount = 1, ChunkType = ChunkType.Prose },
             new DocumentChunk { Id = Guid.NewGuid(), ChunkIndex = 1, Text = "B", TokenCount = 1, ChunkType = ChunkType.Prose }
@@ -189,5 +206,23 @@ public class UploadDocumentCommandHandlerTests
 
         await Assert.ThrowsAsync<ExternalServiceException>(() => CreateHandler().Handle(command, CancellationToken.None));
         _unitOfWork.Verify(u => u.CompleteAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_embeds_each_chunk_with_its_context_header_and_passes_title_and_date_to_the_chunker()
+    {
+        var elements = new List<DocumentElement> { new() { Type = ElementType.Paragraph, Text = "Text." } };
+        _reader.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(elements);
+        _chunker.Setup(c => c.Chunk(It.IsAny<Guid>(), elements, new ChunkingContext("Filing", new DateOnly(2025, 1, 1)))).Returns(
+            [new DocumentChunk { Id = Guid.NewGuid(), ChunkIndex = 0, Text = "Body", ContextHeader = "H", TokenCount = 1, ChunkType = ChunkType.Prose }]);
+        _fileStorage.Setup(s => s.SaveAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("path.htm");
+
+        using var content = new MemoryStream();
+        await CreateHandler().Handle(new UploadDocumentCommand("filing.htm", content, "Filing", new DateOnly(2025, 1, 1)), CancellationToken.None);
+
+        _embeddings.Verify(e => e.EmbedAsync(
+            It.Is<IReadOnlyList<string>>(t => t.Count == 1 && t[0] == "H\nBody"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

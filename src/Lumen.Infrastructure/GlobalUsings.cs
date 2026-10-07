@@ -33,3 +33,4 @@ global using System.Security.Claims;
 
 global using AutoMapper;
 global using Pgvector;
+global using NpgsqlTypes;

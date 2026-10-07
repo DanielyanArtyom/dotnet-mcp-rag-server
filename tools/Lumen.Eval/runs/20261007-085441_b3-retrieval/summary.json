@@ -1,0 +1,57 @@
+{
+  "rows": 24,
+  "retrievalQuestions": 24,
+  "hitAt1": 0.3333333333333333,
+  "hitAt3": 0.625,
+  "hitAt5": 0.6666666666666666,
+  "hitAt10": 0.8333333333333334,
+  "mrr": 0.49002976190476194,
+  "meanRetrievedTokens": 1717,
+  "accuracy": null,
+  "falseAnswerRate": null,
+  "falseRefusalRate": null,
+  "truncatedCount": 0,
+  "grid": {
+    "hitCorrect": 0,
+    "hitWrong": 0,
+    "missCorrect": 0,
+    "missWrong": 0
+  },
+  "latencyP50": 323,
+  "latencyP95": 504,
+  "inputTokens": 0,
+  "outputTokens": 0,
+  "reasoningTokens": 0,
+  "costUsd": null,
+  "repeatFlipRate": null,
+  "byCategory": [
+    {
+      "category": "comparison",
+      "count": 2,
+      "hitAt5": 0.5,
+      "mrr": 0.25,
+      "accuracy": null
+    },
+    {
+      "category": "exact-term",
+      "count": 4,
+      "hitAt5": 0.75,
+      "mrr": 0.75,
+      "accuracy": null
+    },
+    {
+      "category": "prose",
+      "count": 7,
+      "hitAt5": 0.7142857142857143,
+      "mrr": 0.4965986394557823,
+      "accuracy": null
+    },
+    {
+      "category": "table-value",
+      "count": 11,
+      "hitAt5": 0.6363636363636364,
+      "mrr": 0.43495670995671,
+      "accuracy": null
+    }
+  ]
+}

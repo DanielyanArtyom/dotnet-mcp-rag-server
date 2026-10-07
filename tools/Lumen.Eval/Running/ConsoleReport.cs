@@ -16,6 +16,12 @@ public static class ConsoleReport
 
         output.WriteLine("server settings:");
         output.WriteLine(JsonSerializer.Serialize(header.ServerSettings, JsonDefaults.Indented));
+        output.WriteLine($"ingest profile: {header.IngestProfile ?? "(none)"}");
+        foreach (var d in header.Corpus)
+        {
+            output.WriteLine($"  {d.Tenant} / {d.Title}: {d.ChunkCount} chunks");
+        }
+
         output.WriteLine($"unlabelable (excluded from retrieval metrics): {Join(header.Unlabelable)}");
         output.WriteLine($"broad anchors (> {EvalRunner.BroadAnchorThreshold} matching chunks): {Join(header.BroadAnchors.Select(kv => $"{kv.Key}={kv.Value}"))}");
         output.WriteLine();

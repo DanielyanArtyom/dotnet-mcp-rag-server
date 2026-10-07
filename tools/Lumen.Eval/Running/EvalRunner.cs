@@ -52,6 +52,8 @@ public class EvalRunner
             JudgeDeployment = _judgeDeployment
         };
 
+        header.IngestProfile = header.ServerSettings.TryGetProperty("ingestProfile", out var profile) ? profile.GetString() : null;
+
         if (options.Mode == RunMode.Full && _judgeDeployment is not null
             && header.ServerSettings.TryGetProperty("chat", out var chat)
             && chat.TryGetProperty("deployment", out var answering)
@@ -70,8 +72,18 @@ public class EvalRunner
             chunkTexts[tenant] = [];
             foreach (var document in documents)
             {
-                chunkTexts[tenant].AddRange((await _api.GetChunksAsync(token, document.Id, ct)).Select(c => c.Text));
+                var chunks = await _api.GetChunksAsync(token, document.Id, ct);
+                chunkTexts[tenant].AddRange(chunks.Select(c => c.Text));
+                header.Corpus.Add(new CorpusDocument(tenant, document.Title, document.IngestProfile, chunks.Count));
             }
+        }
+
+        var stale = header.Corpus.Where(d => header.IngestProfile is null || d.IngestProfile != header.IngestProfile).ToList();
+        if (stale.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"The server ingests with profile '{header.IngestProfile ?? "(none reported)"}', but these documents were ingested differently — re-upload them before running the eval: "
+                + string.Join("; ", stale.Select(d => $"{d.Tenant}/{d.Title} = '{d.IngestProfile ?? "(none)"}'")));
         }
 
         var labelable = new HashSet<string>();
@@ -144,6 +156,7 @@ public class EvalRunner
 
         EnsureOwnDocuments(hits.Select(h => h.DocumentId), own, question.Id);
         result.RetrievedTokens = hits.Sum(h => h.TokenCount);
+        result.Sources = ToSources(hits, h => (h.ChunkId, h.DocumentId, h.ChunkIndex, h.ChunkType, h.Distance, h.Score, h.Text));
         if (result.Labelable)
         {
             result.FirstHitRank = RetrievalMetrics.FirstHitRank(hits.Select(h => h.Text).ToList(), question.Anchors);
@@ -163,6 +176,7 @@ public class EvalRunner
         result.Truncated = ask.Truncated;
         result.CitedSourceIds = ask.Sources.Where(s => s.Cited).Select(s => s.SourceId).ToList();
         result.RetrievedTokens = ask.Sources.Sum(s => s.TokenCount);
+        result.Sources = ToSources(ask.Sources, s => (s.ChunkId, s.DocumentId, s.ChunkIndex, s.ChunkType, s.Distance, s.Score, s.Text));
         result.InputTokens = ask.Usage.InputTokens;
         result.OutputTokens = ask.Usage.OutputTokens;
         result.ReasoningTokens = ask.Usage.ReasoningTokens;
@@ -194,6 +208,14 @@ public class EvalRunner
                 break;
         }
     }
+
+    private static List<SourceRecord> ToSources<T>(IReadOnlyList<T> items, Func<T, (Guid ChunkId, Guid DocumentId, int ChunkIndex, string ChunkType, double Distance, double? Score, string Text)> project) =>
+        items.Select((item, index) =>
+        {
+            var s = project(item);
+            return new SourceRecord(index + 1, s.ChunkId, s.DocumentId, s.ChunkIndex, s.ChunkType, s.Distance, s.Score,
+                s.Text.Length <= 200 ? s.Text : s.Text[..200]);
+        }).ToList();
 
     private static void EnsureOwnDocuments(IEnumerable<Guid> documentIds, HashSet<Guid> own, string questionId)
     {

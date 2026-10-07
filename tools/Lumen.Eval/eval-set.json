@@ -183,7 +183,7 @@
       },
       "anchors": [
         [
-          "$10.7 billion year-over-year decrease"
+          "billion year-over-year decrease in the provision for income taxes related to the State Aid Decision"
         ]
       ],
       "holdout": true,
@@ -379,6 +379,14 @@
         ],
         [
           "CET1 ratios were 14.6%"
+        ],
+        [
+          "CET1 capital ratio",
+          "14.6"
+        ],
+        [
+          "capital ratio - Standardized",
+          "14.6"
         ]
       ],
       "holdout": false,
@@ -420,6 +428,14 @@
         ],
         [
           "CET1 ratios were each 14.2%"
+        ],
+        [
+          "CET1 capital ratio",
+          "14.2"
+        ],
+        [
+          "capital ratio - Standardized",
+          "14.2"
         ]
       ],
       "holdout": false,
@@ -570,6 +586,11 @@
           "14.2",
           "14.6",
           "11.5"
+        ],
+        [
+          "capital ratio - Standardized",
+          "14.2",
+          "14.6"
         ]
       ],
       "holdout": false,

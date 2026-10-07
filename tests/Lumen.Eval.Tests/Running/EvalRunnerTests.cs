@@ -9,7 +9,7 @@ public class EvalRunnerTests
     private static readonly Guid OwnDocument = Guid.NewGuid();
     private static readonly Guid ForeignDocument = Guid.NewGuid();
 
-    private sealed class StubHandler(string answeringDeployment = "gpt-answer", bool foreignHits = true, string? failWhenBodyContains = null) : HttpMessageHandler
+    private sealed class StubHandler(string answeringDeployment = "gpt-answer", bool foreignHits = true, string? failWhenBodyContains = null, string documentProfile = "p1") : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -24,8 +24,8 @@ public class EvalRunnerTests
             var json = path switch
             {
                 "/api/auth/token" => """{"token":"t"}""",
-                "/api/settings" => $$$"""{"chat":{"deployment":"{{{answeringDeployment}}}"}}""",
-                "/api/documents" => $$"""[{"id":"{{OwnDocument}}","title":"Own"}]""",
+                "/api/settings" => $$$"""{"chat":{"deployment":"{{{answeringDeployment}}}"},"ingestProfile":"p1"}""",
+                "/api/documents" => $$$"""[{"id":"{{{OwnDocument}}}","title":"Own","ingestProfile":"{{{documentProfile}}}"}]""",
                 _ when path.EndsWith("/chunks") => """[{"chunkIndex":0,"text":"net sales 416,161","tokenCount":5,"chunkType":"Text"}]""",
                 "/api/search" => $$$"""[{"chunkId":"{{{Guid.NewGuid()}}}","documentId":"{{{hitDocument}}}","documentTitle":"X","chunkIndex":0,"chunkType":"Text","tokenCount":5,"text":"net sales 416,161","distance":0.1}]""",
                 "/api/ask" => $$$"""{"answer":"416,161 [1]","refused":false,"truncated":false,"sources":[{"sourceId":1,"chunkId":"{{{Guid.NewGuid()}}}","documentId":"{{{hitDocument}}}","documentTitle":"X","chunkIndex":0,"chunkType":"Text","tokenCount":5,"distance":0.1,"cited":true,"text":"net sales 416,161"}],"usage":{"inputTokens":1,"outputTokens":1,"reasoningTokens":0},"timings":{"retrievalMs":1,"generationMs":1,"totalMs":2}}""",
@@ -63,8 +63,8 @@ public class EvalRunnerTests
         ]
     };
 
-    private static EvalRunner Runner(string? judgeDeployment, bool withJudge = true, bool foreignHits = true, string? failWhenBodyContains = null) =>
-        new(new LumenApiClient(new HttpClient(new StubHandler(foreignHits: foreignHits, failWhenBodyContains: failWhenBodyContains)) { BaseAddress = new Uri("http://stub/") }),
+    private static EvalRunner Runner(string? judgeDeployment, bool withJudge = true, bool foreignHits = true, string? failWhenBodyContains = null, string documentProfile = "p1") =>
+        new(new LumenApiClient(new HttpClient(new StubHandler(foreignHits: foreignHits, failWhenBodyContains: failWhenBodyContains, documentProfile: documentProfile)) { BaseAddress = new Uri("http://stub/") }),
             new Dictionary<string, TenantCredentials> { ["acme"] = new() { Email = "a", Password = "b" } },
             withJudge ? new StubJudge() : null, judgeDeployment);
 
@@ -115,5 +115,28 @@ public class EvalRunnerTests
         Assert.IsType<HttpRequestException>(ex.InnerException);
         Assert.Equal("q1", Assert.Single(ex.Partial.Results).Id);
         Assert.Equal("stub failure", ex.Partial.Header.AbortReason);
+    }
+
+    [Fact]
+    public async Task Refuses_to_run_when_a_document_was_ingested_under_another_profile()
+    {
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Run(Runner(null, withJudge: false, foreignHits: false, documentProfile: "old"), RunMode.Retrieval));
+
+        Assert.Contains("Own", ex.Message);
+        Assert.Contains("old", ex.Message);
+        Assert.Contains("p1", ex.Message);
+    }
+
+    [Fact]
+    public async Task Records_the_corpus_and_the_retrieved_sources()
+    {
+        var outcome = await Run(Runner(null, withJudge: false, foreignHits: false), RunMode.Retrieval);
+
+        Assert.Equal("p1", outcome.Header.IngestProfile);
+        var document = Assert.Single(outcome.Header.Corpus);
+        Assert.Equal(("acme", "Own", "p1", 1), (document.Tenant, document.Title, document.IngestProfile, document.ChunkCount));
+        var source = Assert.Single(outcome.Results[0].Sources);
+        Assert.Equal(1, source.Rank);
+        Assert.StartsWith("net sales", source.TextPreview);
     }
 }

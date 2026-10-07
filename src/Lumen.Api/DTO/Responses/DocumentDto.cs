@@ -7,6 +7,7 @@ public class DocumentDto
     public Guid Id { get; set; }
     public string Title { get; set; } = default!;
     public DateOnly FilingDate { get; set; }
+    public string? IngestProfile { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ChunkCount { get; set; }
 

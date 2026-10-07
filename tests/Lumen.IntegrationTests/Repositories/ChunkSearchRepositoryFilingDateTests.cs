@@ -27,7 +27,7 @@ public class ChunkSearchRepositoryFilingDateTests(PostgresFixture fixture)
         var repository = scope.ServiceProvider.GetRequiredService<IChunkSearchRepository>();
 
         var vector = (await embeddings.EmbedAsync(["Net sales rose."]))[0];
-        var results = await repository.SearchAsync(vector, embeddings.ModelName, 5, null);
+        var results = await repository.SearchAsync(vector, "Net sales rose.", embeddings.ModelName, 5, null);
 
         Assert.NotEmpty(results);
         Assert.Equal(new DateOnly(2025, 9, 27), results[0].DocumentFilingDate);
