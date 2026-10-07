@@ -1,0 +1,675 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "id": "a-net-sales-fy25",
+      "tenant": "acme",
+      "category": "table-value",
+      "question": "What were Apple's total net sales for fiscal year 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 416161,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "Total net sales",
+          "416,161"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K MD&A: segment + category tables and Note 2 all carry the row; table caption sits in the previous prose chunk"
+    },
+    {
+      "id": "a-services-fy25",
+      "tenant": "acme",
+      "category": "table-value",
+      "question": "How much net sales did Apple's Services category generate in fiscal 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 109158,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "Services",
+          "109,158"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K 'Products and Services Performance' table, row 'Services (1)'"
+    },
+    {
+      "id": "a-china-fy25",
+      "tenant": "acme",
+      "category": "table-value",
+      "question": "What were Apple's net sales in the Greater China segment in fiscal 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 64377,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "Greater China",
+          "64,377"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K segment table; answer must not be the 2024 figure 66,952"
+    },
+    {
+      "id": "a-gm-pct-fy25",
+      "tenant": "acme",
+      "category": "table-value",
+      "question": "What was Apple's total gross margin percentage for fiscal 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 46.9,
+        "unit": "percent"
+      },
+      "anchors": [
+        [
+          "Total gross margin percentage",
+          "46.9"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Gross Margin table; Products 36.8% and Services 75.4% are distractors in the same chunk"
+    },
+    {
+      "id": "a-rnd-fy25",
+      "tenant": "acme",
+      "category": "table-value",
+      "question": "How much did Apple spend on research and development in fiscal 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 34550,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "Research and development",
+          "34,550"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Operating Expenses table"
+    },
+    {
+      "id": "a-ir-sensitivity",
+      "tenant": "acme",
+      "category": "table-value",
+      "question": "By how much would a 100 basis point increase in interest rates reduce the fair value of Apple's investment portfolio as of September 27, 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 2416,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "Investment portfolio",
+          "2,416"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Item 7A table with an unusual layout (instrument / hypothetical increase / impact columns)"
+    },
+    {
+      "id": "a-iphone-9m-fy26",
+      "tenant": "acme",
+      "category": "table-value",
+      "question": "What were Apple's iPhone net sales for the first nine months of fiscal 2026?",
+      "expected": {
+        "kind": "number",
+        "value": 196515,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "iPhone",
+          "196,515"
+        ]
+      ],
+      "holdout": true,
+      "note": "10-Q category table, nine-month column; quarter figure 54,252 is the distractor"
+    },
+    {
+      "id": "a-employees-fy25",
+      "tenant": "acme",
+      "category": "prose",
+      "question": "Roughly how many full-time equivalent employees did Apple have at the end of fiscal 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 166000
+      },
+      "anchors": [
+        [
+          "166,000 full-time equivalent employees"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Item 1 Human Capital"
+    },
+    {
+      "id": "a-buyback-fy25",
+      "tenant": "acme",
+      "category": "prose",
+      "question": "How much of its common stock did Apple buy back during fiscal 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 89.3,
+        "unit": "billions"
+      },
+      "anchors": [
+        [
+          "repurchased $89.3 billion"
+        ],
+        [
+          "402 million shares"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K MD&A Capital Return Program + Note 10; paraphrased ('buy back' vs 'repurchased')"
+    },
+    {
+      "id": "a-tax-rate-why",
+      "tenant": "acme",
+      "category": "prose",
+      "question": "What was the main reason Apple's effective tax rate was lower in fiscal 2025 than in fiscal 2024?",
+      "expected": {
+        "kind": "text",
+        "text": "A $10.7 billion year-over-year decrease in the provision for income taxes related to the European Commission State Aid Decision (plus the impact of changes in unrecognized tax benefits)."
+      },
+      "anchors": [
+        [
+          "billion year-over-year decrease in the provision for income taxes related to the State Aid Decision"
+        ]
+      ],
+      "holdout": true,
+      "note": "10-K MD&A Provision for Income Taxes; requires naming the State Aid Decision"
+    },
+    {
+      "id": "a-buyback-q3fy26",
+      "tenant": "acme",
+      "category": "prose",
+      "question": "How much stock did Apple repurchase in the third quarter of fiscal 2026?",
+      "expected": {
+        "kind": "number",
+        "value": 25.8,
+        "unit": "billions"
+      },
+      "anchors": [
+        [
+          "repurchased $25.8 billion"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-Q MD&A Capital Return Program"
+    },
+    {
+      "id": "a-dma-fine",
+      "tenant": "acme",
+      "category": "exact-term",
+      "question": "How large was the fine the European Commission imposed on Apple in the DMA Article 5(4) Investigation?",
+      "expected": {
+        "kind": "number",
+        "value": 500,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "fined the Company €500 million"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Item 3 Legal Proceedings; amount is in euros (€500 million)"
+    },
+    {
+      "id": "a-fx-var",
+      "tenant": "acme",
+      "category": "exact-term",
+      "question": "What maximum one-day loss in fair value did Apple's VAR model estimate for its foreign currency derivative positions as of September 27, 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 590,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "maximum one-day loss in fair value of $590 million"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Item 7A; 2024 value $538 million in the same sentence is the distractor"
+    },
+    {
+      "id": "a-siri-ai",
+      "tenant": "acme",
+      "category": "exact-term",
+      "question": "Which AI product did Apple introduce during the third quarter of fiscal 2026?",
+      "expected": {
+        "kind": "text",
+        "text": "Siri AI."
+      },
+      "anchors": [
+        [
+          "introduced Siri AI"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-Q MD&A Business Seasonality and Product Introductions; post-training-cutoff fact, model cannot know it from memory"
+    },
+    {
+      "id": "a-dividend-change",
+      "tenant": "acme",
+      "category": "comparison",
+      "question": "How did Apple's quarterly cash dividend per share change between the end of fiscal 2025 and June 27, 2026?",
+      "expected": {
+        "kind": "text",
+        "text": "It increased from $0.26 to $0.27 per share."
+      },
+      "anchors": [
+        [
+          "quarterly cash dividend was $0.26 per share"
+        ],
+        [
+          "quarterly cash dividend was $0.27 per share"
+        ]
+      ],
+      "holdout": false,
+      "note": "needs a chunk from the 10-K and one from the 10-Q"
+    },
+    {
+      "id": "a-gm-pct-delta",
+      "tenant": "acme",
+      "category": "comparison",
+      "question": "By how many percentage points did Apple's total gross margin percentage for the third quarter of fiscal 2026 exceed its total gross margin percentage for full fiscal 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 3.2,
+        "unit": "percent"
+      },
+      "anchors": [
+        [
+          "Total gross margin percentage",
+          "46.9"
+        ],
+        [
+          "Total gross margin percentage",
+          "50.1"
+        ]
+      ],
+      "holdout": true,
+      "note": "50.1% (10-Q, three months) minus 46.9% (10-K); computed value, not stated anywhere"
+    },
+    {
+      "id": "a-iphone-units",
+      "tenant": "acme",
+      "category": "unanswerable",
+      "question": "How many iPhone units did Apple sell in fiscal 2025?",
+      "expected": {
+        "kind": "refusal"
+      },
+      "anchors": [],
+      "holdout": false,
+      "note": "Apple does not report unit sales; only net sales in dollars"
+    },
+    {
+      "id": "a-q4-guidance",
+      "tenant": "acme",
+      "category": "unanswerable",
+      "question": "What net sales guidance did Apple give for the fourth quarter of fiscal 2026?",
+      "expected": {
+        "kind": "refusal"
+      },
+      "anchors": [],
+      "holdout": false,
+      "note": "10-Q has no guidance; tempting to extrapolate from Q3 numbers"
+    },
+    {
+      "id": "a-trap-jpm-cet1",
+      "tenant": "acme",
+      "category": "cross-tenant",
+      "question": "What was JPMorgan Chase's Standardized CET1 capital ratio at December 31, 2025?",
+      "expected": {
+        "kind": "refusal"
+      },
+      "anchors": [],
+      "holdout": false,
+      "note": "asked as Acme; the answer exists only in Globex's documents"
+    },
+    {
+      "id": "g-net-income-2025",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "What was JPMorgan Chase's net income for 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 57048,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "Net income",
+          "57,048"
+        ],
+        [
+          "net income of $57.0 billion"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Executive Overview table + Firmwide overview prose"
+    },
+    {
+      "id": "g-cet1-2025",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "What was JPMorgan Chase's Standardized CET1 capital ratio at December 31, 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 14.6,
+        "unit": "percent"
+      },
+      "anchors": [
+        [
+          "CET1 capital",
+          "14.6",
+          "15.7"
+        ],
+        [
+          "CET1 ratios were 14.6%"
+        ],
+        [
+          "CET1 capital ratio",
+          "14.6"
+        ],
+        [
+          "capital ratio - Standardized",
+          "14.6"
+        ]
+      ],
+      "holdout": false,
+      "note": "Advanced ratio 14.1% and 2024 ratio 15.7% are distractors"
+    },
+    {
+      "id": "g-eps-2025",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "What were JPMorgan Chase's diluted earnings per share for 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 20.02
+      },
+      "anchors": [
+        [
+          "Diluted earnings per share",
+          "20.02"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Executive Overview table"
+    },
+    {
+      "id": "g-cet1-q2-26",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "What was JPMorgan Chase's Standardized CET1 capital ratio at June 30, 2026?",
+      "expected": {
+        "kind": "number",
+        "value": 14.2,
+        "unit": "percent"
+      },
+      "anchors": [
+        [
+          "CET1 capital",
+          "14.2",
+          "15.1"
+        ],
+        [
+          "CET1 ratios were each 14.2%"
+        ],
+        [
+          "CET1 capital ratio",
+          "14.2"
+        ],
+        [
+          "capital ratio - Standardized",
+          "14.2"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-Q Executive Overview"
+    },
+    {
+      "id": "g-nii-6m-26",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "What was JPMorgan Chase's net interest income for the six months ended June 30, 2026?",
+      "expected": {
+        "kind": "number",
+        "value": 50877,
+        "unit": "millions"
+      },
+      "anchors": [
+        [
+          "Net interest income",
+          "50,877"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-Q table, six-month column; quarter figure 25,511 is the distractor"
+    },
+    {
+      "id": "g-apple-card-what",
+      "tenant": "globex",
+      "category": "prose",
+      "question": "What is the Apple Card transaction that JPMorgan Chase announced?",
+      "expected": {
+        "kind": "text",
+        "text": "Chase will become the new issuer of Apple Card: on December 30, 2025 the Firm entered into a forward purchase commitment to acquire the Apple credit card portfolio, with closing expected in approximately 24 months."
+      },
+      "anchors": [
+        [
+          "new issuer of Apple Card"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Executive Overview and 10-Q; post-cutoff fact"
+    },
+    {
+      "id": "g-apple-card-allowance",
+      "tenant": "globex",
+      "category": "prose",
+      "question": "How much did the Apple Card transaction add to JPMorgan Chase's allowance for credit losses in 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 2.2,
+        "unit": "billions"
+      },
+      "anchors": [
+        [
+          "$2.2 billion related to the Apple Card transaction"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K: appears in several places (Executive Overview, CCB results, Note 13)"
+    },
+    {
+      "id": "g-expense-why",
+      "tenant": "globex",
+      "category": "prose",
+      "question": "Why did JPMorgan Chase's noninterest expense rise in 2025?",
+      "expected": {
+        "kind": "text",
+        "text": "Mainly higher compensation expense (higher revenue-related compensation and growth in the number of employees), plus higher brokerage expense and distribution fees, higher auto lease depreciation, continued technology and marketing investment and higher occupancy expense."
+      },
+      "anchors": [
+        [
+          "Noninterest expense was $95.6 billion, up 4%"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Firmwide overview bullet"
+    },
+    {
+      "id": "g-nir-why-q2-26",
+      "tenant": "globex",
+      "category": "prose",
+      "question": "Why did JPMorgan Chase's noninterest revenue jump in the second quarter of 2026?",
+      "expected": {
+        "kind": "text",
+        "text": "Predominantly the $4.6 billion net gain related to Visa shares, plus higher Markets noninterest revenue, $1.0 billion of gains on certain equity investments, higher asset management and investment banking fees and higher auto operating lease income."
+      },
+      "anchors": [
+        [
+          "was $31.8 billion, up 47%"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-Q Firmwide overview bullet"
+    },
+    {
+      "id": "g-branches",
+      "tenant": "globex",
+      "category": "exact-term",
+      "question": "How many branches did JPMorgan Chase own or lease at December 31, 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 5083
+      },
+      "anchors": [
+        [
+          "5,083 branches"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K Item 2 Properties, footnote under a square-footage table"
+    },
+    {
+      "id": "g-dimon-10b5-1",
+      "tenant": "globex",
+      "category": "exact-term",
+      "question": "How many shares are to be sold under the Rule 10b5-1 trading arrangement James Dimon adopted on November 10, 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 200000
+      },
+      "anchors": [
+        [
+          "James Dimon",
+          "200,000"
+        ]
+      ],
+      "holdout": true,
+      "note": "10-K Item 9B table row"
+    },
+    {
+      "id": "g-cet1-delta",
+      "tenant": "globex",
+      "category": "comparison",
+      "question": "By how many percentage points did JPMorgan Chase's Standardized CET1 ratio decline between December 31, 2025 and June 30, 2026?",
+      "expected": {
+        "kind": "number",
+        "value": 0.4,
+        "unit": "percent"
+      },
+      "anchors": [
+        [
+          "CET1 ratios were 14.6%"
+        ],
+        [
+          "CET1 ratios were each 14.2%"
+        ],
+        [
+          "CET1 capital ratio",
+          "14.2",
+          "14.6",
+          "11.5"
+        ],
+        [
+          "capital ratio - Standardized",
+          "14.2",
+          "14.6"
+        ]
+      ],
+      "holdout": false,
+      "note": "14.6% to 14.2%; stored as a positive magnitude because the question says 'decline'"
+    },
+    {
+      "id": "g-tbvps-delta",
+      "tenant": "globex",
+      "category": "comparison",
+      "question": "How much did JPMorgan Chase's tangible book value per share increase from December 31, 2025 to June 30, 2026?",
+      "expected": {
+        "kind": "number",
+        "value": 5.79
+      },
+      "anchors": [
+        [
+          "Tangible book value per share",
+          "113.35",
+          "107.56"
+        ],
+        [
+          "Tangible book value per share",
+          "107.56"
+        ],
+        [
+          "Tangible book value per share",
+          "113.35"
+        ]
+      ],
+      "holdout": true,
+      "note": "$107.56 to $113.35; computed"
+    },
+    {
+      "id": "g-apple-card-price",
+      "tenant": "globex",
+      "category": "unanswerable",
+      "question": "What purchase price will JPMorgan Chase pay to acquire the Apple Card portfolio?",
+      "expected": {
+        "kind": "refusal"
+      },
+      "anchors": [],
+      "holdout": false,
+      "note": "price not disclosed; filings give ~$104 billion credit exposure and ~$23 billion drawn loans, which a model may wrongly present as the price"
+    },
+    {
+      "id": "g-dimon-pay",
+      "tenant": "globex",
+      "category": "unanswerable",
+      "question": "What was James Dimon's total compensation for 2025?",
+      "expected": {
+        "kind": "refusal"
+      },
+      "anchors": [],
+      "holdout": false,
+      "note": "not in the 10-K (proxy statement)"
+    },
+    {
+      "id": "g-trap-apple-sales",
+      "tenant": "globex",
+      "category": "cross-tenant",
+      "question": "What were Apple's total net sales for fiscal 2025?",
+      "expected": {
+        "kind": "refusal"
+      },
+      "anchors": [],
+      "holdout": true,
+      "note": "asked as Globex; Globex filings mention Apple (Apple Card) so retrieval will find Apple-related chunks, but none has Apple's sales"
+    },
+    {
+      "id": "g-trap-apple-employees",
+      "tenant": "globex",
+      "category": "cross-tenant",
+      "question": "How many full-time equivalent employees did Apple have as of September 27, 2025?",
+      "expected": {
+        "kind": "refusal"
+      },
+      "anchors": [],
+      "holdout": false,
+      "note": "asked as Globex; JPM has its own employee figures that a model might substitute"
+    }
+  ]
+}

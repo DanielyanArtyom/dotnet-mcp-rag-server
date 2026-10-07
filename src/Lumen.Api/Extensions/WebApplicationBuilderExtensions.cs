@@ -1,5 +1,4 @@
 using Pgvector.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace Lumen.Api.Extensions;
 
@@ -14,11 +13,22 @@ public static class WebApplicationBuilderExtensions
             if (!Path.IsPathRooted(o.RootPath))
                 o.RootPath = Path.Combine(builder.Environment.ContentRootPath, o.RootPath);
         });
-        builder.Services.Configure<ChunkingOptions>(builder.Configuration.GetSection(ChunkingOptions.SectionName));
+        builder.Services.AddOptions<ChunkingOptions>()
+            .Bind(builder.Configuration.GetSection(ChunkingOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<ChunkingOptions>, ChunkingOptionsValidator>();
         builder.Services.AddOptions<EmbeddingOptions>()
             .Bind(builder.Configuration.GetSection(EmbeddingOptions.SectionName))
             .ValidateOnStart();
         builder.Services.AddSingleton<IValidateOptions<EmbeddingOptions>, EmbeddingOptionsValidator>();
+        builder.Services.AddOptions<ChatSettingsOptions>()
+            .Bind(builder.Configuration.GetSection(ChatSettingsOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<ChatSettingsOptions>, ChatSettingsOptionsValidator>();
+        builder.Services.AddOptions<SearchOptions>()
+            .Bind(builder.Configuration.GetSection(SearchOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<SearchOptions>, SearchOptionsValidator>();
 
         builder.Services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(builder.Configuration.GetConnectionString("Default"), o => o.UseVector()));

@@ -1,0 +1,81 @@
+{
+  "label": "final-retrieval",
+  "mode": "retrieval",
+  "startedAt": "2026-10-07T09:44:50.948025+04:00",
+  "gitCommit": "0639d78-dirty",
+  "evalSetPath": "eval-set.json",
+  "evalSetSha256": "8a02fdeeef195a34d7ac0117caa8ea58aba5aa22d0d05613f5573da063515f60",
+  "repeat": 1,
+  "holdout": false,
+  "serverSettings": {
+    "chat": {
+      "provider": "AzureOpenAI",
+      "deployment": "gpt-4o",
+      "temperature": 0.2,
+      "topP": null,
+      "reasoningEffort": null,
+      "maxOutputTokens": 1024,
+      "contextTopK": 10
+    },
+    "embeddings": {
+      "provider": "AzureOpenAI",
+      "model": "text-embedding-3-small"
+    },
+    "chunking": {
+      "maxTokensPerChunk": 250,
+      "overlapTokens": 60
+    },
+    "searchMode": "vector",
+    "search": {
+      "mode": "vector",
+      "rrfK": 60,
+      "candidates": 50,
+      "lexicalWeight": 1,
+      "vectorWeight": 1,
+      "maxChunksPerDocument": null
+    },
+    "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1",
+    "promptHash": "ae0bb62cae85"
+  },
+  "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1",
+  "corpus": [
+    {
+      "tenant": "acme",
+      "title": "Apple 10-K",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1",
+      "chunkCount": 405
+    },
+    {
+      "tenant": "acme",
+      "title": "Apple 10-Q",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1",
+      "chunkCount": 201
+    },
+    {
+      "tenant": "globex",
+      "title": "Morgan 10-K",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1",
+      "chunkCount": 2523
+    },
+    {
+      "tenant": "globex",
+      "title": "Morgan 10-Q",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1",
+      "chunkCount": 1358
+    }
+  ],
+  "unlabelable": [],
+  "broadAnchors": {
+    "a-net-sales-fy25": 6,
+    "g-net-income-2025": 14,
+    "g-cet1-2025": 8,
+    "g-nii-6m-26": 7,
+    "g-apple-card-what": 6,
+    "g-apple-card-allowance": 11,
+    "g-tbvps-delta": 6
+  },
+  "judgeDeployment": null,
+  "judgeInputTokens": 0,
+  "judgeOutputTokens": 0,
+  "abortReason": null
+}

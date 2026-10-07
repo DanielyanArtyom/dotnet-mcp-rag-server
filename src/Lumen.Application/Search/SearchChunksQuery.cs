@@ -30,6 +30,6 @@ public class SearchChunksQueryHandler : IRequestHandler<SearchChunksQuery, List<
             throw new ExternalServiceException("Generating an embedding for the search query failed.", ex);
         }
 
-        return await _chunks.SearchAsync(vectors[0], _embeddings.ModelName, request.TopK, request.DocumentId, ct);
+        return await _chunks.SearchAsync(vectors[0], request.Query, _embeddings.ModelName, request.TopK, request.DocumentId, ct);
     }
 }

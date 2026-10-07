@@ -1,0 +1,80 @@
+{
+  "label": "b2-full",
+  "mode": "full",
+  "startedAt": "2026-10-07T08:43:37.098979+04:00",
+  "gitCommit": "0639d78-dirty",
+  "evalSetPath": "eval-set.json",
+  "evalSetSha256": "8a02fdeeef195a34d7ac0117caa8ea58aba5aa22d0d05613f5573da063515f60",
+  "repeat": 1,
+  "holdout": false,
+  "serverSettings": {
+    "chat": {
+      "provider": "AzureOpenAI",
+      "deployment": "gpt-4o",
+      "temperature": 0.2,
+      "topP": null,
+      "reasoningEffort": null,
+      "maxOutputTokens": 1024,
+      "contextTopK": 5
+    },
+    "embeddings": {
+      "provider": "AzureOpenAI",
+      "model": "text-embedding-3-small"
+    },
+    "chunking": {
+      "maxTokensPerChunk": 250,
+      "overlapTokens": 60
+    },
+    "searchMode": "hybrid",
+    "search": {
+      "mode": "hybrid",
+      "rrfK": 60,
+      "candidates": 50,
+      "lexicalWeight": 1,
+      "vectorWeight": 1,
+      "maxChunksPerDocument": null
+    },
+    "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=off",
+    "promptHash": "ae0bb62cae85"
+  },
+  "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=off",
+  "corpus": [
+    {
+      "tenant": "acme",
+      "title": "Apple 10-k",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=off",
+      "chunkCount": 405
+    },
+    {
+      "tenant": "acme",
+      "title": "Apple 10-Q",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=off",
+      "chunkCount": 201
+    },
+    {
+      "tenant": "globex",
+      "title": "Morgan 10-Q",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=off",
+      "chunkCount": 2521
+    },
+    {
+      "tenant": "globex",
+      "title": "Morgan 10-Q",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=off",
+      "chunkCount": 1357
+    }
+  ],
+  "unlabelable": [],
+  "broadAnchors": {
+    "a-net-sales-fy25": 6,
+    "g-net-income-2025": 14,
+    "g-cet1-2025": 8,
+    "g-nii-6m-26": 7,
+    "g-apple-card-allowance": 10,
+    "g-tbvps-delta": 6
+  },
+  "judgeDeployment": "gpt-5-mini",
+  "judgeInputTokens": 850,
+  "judgeOutputTokens": 560,
+  "abortReason": null
+}

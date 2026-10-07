@@ -6,7 +6,11 @@
     <Project Path="src/Lumen.Infrastructure/Lumen.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Lumen.Eval.Tests/Lumen.Eval.Tests.csproj" />
     <Project Path="tests/Lumen.IntegrationTests/Lumen.IntegrationTests.csproj" />
     <Project Path="tests/Lumen.UnitTests/Lumen.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Lumen.Eval/Lumen.Eval.csproj" />
   </Folder>
 </Solution>

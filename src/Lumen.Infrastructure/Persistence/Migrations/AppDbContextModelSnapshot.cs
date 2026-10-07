@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using NpgsqlTypes;
 using Pgvector;
 
 #nullable disable
@@ -42,6 +43,9 @@ namespace Lumen.Infrastructure.Persistence.Migrations
                     b.Property<int>("ChunkType")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ContextHeader")
+                        .HasColumnType("text");
+
                     b.Property<Guid>("DocumentId")
                         .HasColumnType("uuid");
 
@@ -54,6 +58,11 @@ namespace Lumen.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<NpgsqlTsVector>("SearchVector")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("tsvector")
+                        .HasComputedColumnSql("to_tsvector('english', coalesce(\"ContextHeader\", '') || ' ' || \"Text\")", true);
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -65,6 +74,10 @@ namespace Lumen.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("SearchVector");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
 
                     b.HasIndex("TenantId");
 
@@ -87,6 +100,10 @@ namespace Lumen.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly>("FilingDate")
                         .HasColumnType("date");
+
+                    b.Property<string>("IngestProfile")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("RawFilePath")
                         .IsRequired()

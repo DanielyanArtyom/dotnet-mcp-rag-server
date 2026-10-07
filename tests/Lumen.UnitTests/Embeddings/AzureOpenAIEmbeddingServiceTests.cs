@@ -1,5 +1,3 @@
-using Microsoft.Extensions.AI;
-
 namespace Lumen.UnitTests.Embeddings;
 
 public class AzureOpenAIEmbeddingServiceTests

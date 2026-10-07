@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Xunit.Abstractions;
 
 namespace Lumen.IntegrationTests.Documents;
@@ -69,5 +70,90 @@ public class DocumentIngestionCharacterizationTests(PostgresFixture fixture, ITe
         Assert.Contains(chunks!, c => c.ChunkType == "Prose");
         Assert.Equal(Enumerable.Range(0, chunks!.Count), chunks!.Select(c => c.ChunkIndex));
         Assert.All(chunks!, c => Assert.False(string.IsNullOrWhiteSpace(c.Text), $"Chunk {c.ChunkIndex} is empty"));
+    }
+
+    [Fact]
+    public async Task With_context_headers_on_every_Apple_10K_chunk_carries_a_header_with_its_section()
+    {
+        using var factory = _factory.WithWebHostBuilder(b => b.UseSetting("Chunking:ContextHeaders", "true"));
+        using var client = factory.CreateClient();
+        client.Timeout = TimeSpan.FromMinutes(5);
+        var (_, email, password) = await TestDataSeeder.SeedTenantWithUserAsync(fixture.ConnectionString, "CharacterizationHeaders", Role.Admin);
+        await TestAuth.AuthenticateAsync(client, email, password);
+
+        var fileBytes = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "apple-10k-fy2025.htm"));
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("text/html");
+        content.Add(fileContent, "file", "apple-10k-fy2025.htm");
+        content.Add(new StringContent("Apple 10-K FY2025"), "title");
+        content.Add(new StringContent("2025-10-31"), "filingDate");
+
+        var uploadResponse = await client.PostAsync("/api/documents/upload", content);
+        Assert.Equal(HttpStatusCode.Created, uploadResponse.StatusCode);
+        var uploaded = await uploadResponse.Content.ReadFromJsonAsync<DocumentDto>();
+        var chunks = await client.GetFromJsonAsync<List<DocumentChunkDto>>($"/api/documents/{uploaded!.Id}/chunks");
+
+        output.WriteLine($"Chunks with headers on: {chunks!.Count}");
+        foreach (var header in chunks.Select(c => c.ContextHeader).Distinct().Take(25))
+            output.WriteLine($"Header: {header}");
+
+        Assert.All(chunks, c => Assert.StartsWith("Apple 10-K FY2025", c.ContextHeader));
+        Assert.Contains(chunks, c => c.ContextHeader!.Contains("— Gross Margin"));
+        Assert.All(chunks, c => Assert.True(c.TokenCount <= 250));
+    }
+
+    [Fact]
+    public async Task With_MergeBelowTokens_the_Apple_10K_has_fewer_chunks_and_still_respects_the_budget()
+    {
+        var baseline = await UploadAppleAsync(_factory, "CharacterizationMergeBase");
+        using var mergingFactory = _factory.WithWebHostBuilder(b => b.UseSetting("Chunking:MergeBelowTokens", "20"));
+        var merged = await UploadAppleAsync(mergingFactory, "CharacterizationMerge");
+
+        var shortBefore = baseline.Count(c => c.TokenCount <= 20);
+        var shortAfter = merged.Count(c => c.TokenCount <= 20);
+        output.WriteLine($"Chunks default/merged: {baseline.Count}/{merged.Count}; chunks <= 20 tokens default/merged: {shortBefore}/{shortAfter}");
+
+        Assert.True(merged.Count < baseline.Count);
+        Assert.True(shortAfter < shortBefore);
+        Assert.All(merged, c => Assert.True(c.TokenCount <= 250));
+        Assert.Equal(Enumerable.Range(0, merged.Count), merged.Select(c => c.ChunkIndex));
+    }
+
+    [Fact]
+    public async Task With_ProtectDecimals_no_Apple_10K_chunk_has_a_broken_decimal_and_the_budget_holds()
+    {
+        var baseline = await UploadAppleAsync(_factory, "CharacterizationDecimalsBase");
+        using var protectingFactory = _factory.WithWebHostBuilder(b => b.UseSetting("Chunking:ProtectDecimals", "true"));
+        var protectedChunks = await UploadAppleAsync(protectingFactory, "CharacterizationDecimals");
+
+        var brokenBefore = baseline.Count(c => Regex.IsMatch(c.Text, @"\d\.\s+\d"));
+        var brokenAfter = protectedChunks.Count(c => Regex.IsMatch(c.Text, @"\d\.\s+\d"));
+        output.WriteLine($"Chunks with a broken decimal default/protected: {brokenBefore}/{brokenAfter} of {baseline.Count}/{protectedChunks.Count}");
+
+        Assert.Equal(0, brokenAfter);
+        Assert.All(protectedChunks, c => Assert.DoesNotContain("\u2024", c.Text));
+        Assert.All(protectedChunks, c => Assert.True(c.TokenCount <= 250));
+    }
+
+    private async Task<List<DocumentChunkDto>> UploadAppleAsync(WebApplicationFactory<Program> factory, string tenantName)
+    {
+        using var client = factory.CreateClient();
+        client.Timeout = TimeSpan.FromMinutes(5);
+        var (_, email, password) = await TestDataSeeder.SeedTenantWithUserAsync(fixture.ConnectionString, tenantName, Role.Admin);
+        await TestAuth.AuthenticateAsync(client, email, password);
+
+        var fileBytes = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "apple-10k-fy2025.htm"));
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("text/html");
+        content.Add(fileContent, "file", "apple-10k-fy2025.htm");
+        content.Add(new StringContent("Apple 10-K FY2025"), "title");
+        content.Add(new StringContent("2025-10-31"), "filingDate");
+
+        var uploadResponse = await client.PostAsync("/api/documents/upload", content);
+        Assert.Equal(HttpStatusCode.Created, uploadResponse.StatusCode);
+        var uploaded = await uploadResponse.Content.ReadFromJsonAsync<DocumentDto>();
+        return (await client.GetFromJsonAsync<List<DocumentChunkDto>>($"/api/documents/{uploaded!.Id}/chunks"))!;
     }
 }

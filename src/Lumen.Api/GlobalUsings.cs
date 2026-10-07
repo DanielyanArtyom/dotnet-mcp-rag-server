@@ -1,4 +1,5 @@
 global using Lumen.Api.DTO.Responses;
+global using Lumen.Application.Ask;
 global using Lumen.Application.Auth;
 global using Lumen.Domain.Entities;
 global using Lumen.Domain.Enums;
@@ -22,6 +23,7 @@ global using Microsoft.AspNetCore.Identity;
 global using Microsoft.AspNetCore.Mvc;
 global using Microsoft.EntityFrameworkCore;
 global using Microsoft.AspNetCore.Authentication.JwtBearer;
+global using Microsoft.Extensions.Options;
 global using Microsoft.IdentityModel.Tokens;
 
 global using System.Security.Claims;

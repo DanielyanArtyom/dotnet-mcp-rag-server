@@ -22,3 +22,7 @@ Logs/
 
 # Uploaded raw documents
 App_Data/
+
+# Eval harness local overrides (judge API key)
+tools/Lumen.Eval/appsettings.Local.json
+

@@ -10,4 +10,5 @@ public class SearchResultDto
     public int TokenCount { get; set; }
     public string Text { get; set; } = default!;
     public double Distance { get; set; }
+    public double? Score { get; set; }
 }

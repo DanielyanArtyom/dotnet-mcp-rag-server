@@ -18,6 +18,7 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
     private readonly ICurrentTenant _currentTenant;
     private readonly ITenantLookupService _tenantLookup;
     private readonly IEmbeddingService _embeddings;
+    private readonly IIngestProfileProvider _ingestProfile;
 
     public UploadDocumentCommandHandler(
         IDocumentReaderFactory readerFactory,
@@ -26,7 +27,8 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
         IUnitOfWork unitOfWork,
         ICurrentTenant currentTenant,
         ITenantLookupService tenantLookup,
-        IEmbeddingService embeddings)
+        IEmbeddingService embeddings,
+        IIngestProfileProvider ingestProfile)
     {
         _readerFactory = readerFactory;
         _chunker = chunker;
@@ -35,6 +37,7 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
         _currentTenant = currentTenant;
         _tenantLookup = tenantLookup;
         _embeddings = embeddings;
+        _ingestProfile = ingestProfile;
     }
 
     public async Task<UploadDocumentResult> Handle(UploadDocumentCommand request, CancellationToken ct)
@@ -44,7 +47,7 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
         var elements = await ReadElementsAsync(reader, request.FileName, bytes, ct);
 
         var documentId = Guid.NewGuid();
-        var chunks = _chunker.Chunk(documentId, elements);
+        var chunks = _chunker.Chunk(documentId, elements, new ChunkingContext(request.Title, request.FilingDate));
         await EmbedAsync(chunks, ct);
 
         var rawFilePath = await SaveRawFileAsync(request, documentId, bytes, ct);
@@ -67,7 +70,7 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
         IReadOnlyList<float[]> vectors;
         try
         {
-            vectors = await _embeddings.EmbedAsync(chunks.Select(c => c.Text).ToList(), ct);
+            vectors = await _embeddings.EmbedAsync(chunks.Select(EmbeddingInput.For).ToList(), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -128,7 +131,7 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
         return await _fileStorage.SaveAsync(tenantId, tenantName, documentId, request.Title, extension, new MemoryStream(bytes), ct);
     }
 
-    private static Document BuildDocument(
+    private Document BuildDocument(
         UploadDocumentCommand request, Guid documentId, List<DocumentElement> elements, string rawFilePath)
     {
         return new Document
@@ -137,7 +140,8 @@ public class UploadDocumentCommandHandler : IRequestHandler<UploadDocumentComman
             Title = request.Title,
             Content = string.Join("\n\n", elements.Select(e => e.Text)),
             RawFilePath = rawFilePath,
-            FilingDate = request.FilingDate
+            FilingDate = request.FilingDate,
+            IngestProfile = _ingestProfile.Current
         };
     }
 
