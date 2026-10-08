@@ -1,156 +1,203 @@
 # DECISIONS.md
 
-Конспект к интервью. После каждого этапа — новая запись, 3-6 строк, без исключений: если решение нечем подкрепить цифрой, значит рано его записывать — сначала прогони eval/тест, потом пиши.
+Interview notes. One entry per real decision, added as each stage completes, 3–6 lines, no exceptions: if a decision can't be backed by a number yet, it's too early to write it down — run the eval or the test first, then write.
 
-Записи добавляются в конец, по мере прохождения этапов (хронологический порядок = порядок этапов).
+Entries are kept in chronological order, which is also stage order. Written in English only.
 
-## Шаблон
+## Template
 
 ```
-## [Дата] <Что решили одной строкой>
+## [Date] <The decision in one line>
 
-**Контекст:** <в какой ситуации возникло решение>
+**Context:** <the situation that called for a decision>
 
-**Варианты:** <что рассматривали>
+**Options:** <what was considered>
 
-**Решение:** <что выбрали>
+**Decision:** <what was chosen>
 
-**Почему:** <причина с конкретной цифрой — % точности, мс, MB, что угодно измеримое>
+**Why:** <the reason, with a concrete number — % accuracy, ms, MB, anything measurable>
 
-**Когда пересмотрю:** <при каком изменении условий вернусь к этому>
+**Would revisit when:** <which change in circumstances would reopen this>
 ```
 
-<!-- Записи по этапам добавляются ниже. Только реальные решения с реальными цифрами — никаких примеров/заглушек. -->
+<!-- Entries go below, by stage. Only real decisions with real numbers — no examples or placeholders. -->
 
-## 2026-09-10 Tenant isolation через EF Core global query filter + ровно один legal `.IgnoreQueryFilters()`
+## 2026-09-09 PostgreSQL + pgvector instead of SQL Server 2025
 
-**Контекст:** Stage 1 требовал не просто скомпилировать multi-tenancy через `TenantId`-дискриминатор + EF Core global query filter, а доказать, что изоляция реально держится — включая login-флоу, где tenant ещё неизвестен (email глобально уникален, tenant определяется только после поиска пользователя).
+**Context:** before Stage 1 we needed one database for both the tenants' relational data and the vectors. For a .NET project the natural candidate is SQL Server 2025 with its native `VECTOR` type. Development happens on an Apple Silicon Mac in Docker; the deployment target is Azure.
 
-**Варианты:** (а) разрешить `.IgnoreQueryFilters()` в любом месте кода, где потребуется обойти фильтр; (б) жёстко ограничить его одним call site — `UserLookupService.FindByEmailAcrossTenantsAsync` — с явным комментарием-обоснованием, запрещая его везде ещё.
+**Options:** (a) SQL Server 2025 (`VECTOR` + `VECTOR_DISTANCE`); (b) PostgreSQL + pgvector; (c) a dedicated vector store (Qdrant) or Azure AI Search next to a relational database.
 
-**Решение:** (б). Ограничение проверялось grep'ом на каждой задаче начиная с Task 9 (где появился первый легальный вызов) по Task 13.
+**Decision:** (b). Option (c) was dropped because a second store means enforcing tenant isolation in two places.
 
-**Почему:** узкий whitelist делает нарушение изоляции видимым на code review, а не растворённым в общей массе кода. Подтверждено 2 независимыми тестами: `TenantIsolationDbContextTests` (EF-уровень, прямой `AppDbContext`, Task 3) и `DocumentTenantIsolationTests` (полный HTTP-флоу — реальные JWT из настоящего `POST /api/auth/token`, реальные HTTP-запросы через `WebApplicationFactory`, Task 13). Финальный прогон всего Stage 1: 23/23 тестов зелёных (11 unit + 12 integration), ровно 1 (один) legal `.IgnoreQueryFilters()` во всей кодовой базе. Дополнительно закреплено на уровне схемы: `Documents.TenantId`/`Users.TenantId` теперь настоящий foreign key на `Tenants.Id` (не просто индекс), и `AppDbContext.SaveChanges` безусловно перезаписывает `TenantId` у новых tenant-owned записей текущим тенантом — клиентское значение никогда не может победить (см. `TenantScopedWriter` для легитимных сценариев записи от имени конкретного тенанта вне обычного request-флоу, например seed-данные).
+**Why:** as of 2026-09-09, SQL Server 2025 had exact search (`VECTOR_DISTANCE`) GA, but its ANN index (`CREATE VECTOR INDEX`, DiskANN) and `VECTOR_SEARCH` were still preview behind the `PREVIEW_FEATURES` flag (Microsoft docs updated 2026-08-25), with a 1,998-dimension limit. Its Docker image is x86-64 only, and the RTM image crashes under emulation on Apple Silicon (`x86_avx_state_ptr` assertion); a CU1 fix is reported only by a third-party blog. pgvector is a stable v0.8.6 with HNSW/IVFFlat GA (not preview), and `pgvector/pgvector:pg17` runs natively on arm64. What the project needs to show — raw SQL that bypasses EF Core's global filter, with an isolation test on top — works equally well on both, so the deciding factor was operational, not capability.
 
-**Когда пересмотрю:** если появится легитимный второй сценарий, которому нужен доступ across tenants (например, superadmin-панель в одной из будущих стадий) — тогда добавить второй явный, тоже узко задокументированный call site, а не ослаблять правило в целом.
+**Would revisit when:** DiskANN indexing in SQL Server goes GA and a native arm64 image ships, or the project needs to be shown on a ".NET + SQL Server" stack (e.g. Azure SQL Database instead of Azure Database for PostgreSQL in Stage 6).
 
-## 2026-09-18 Таблицы из filing'а — атомарные чанки, проза режется по токен-бюджету 250/60
+## 2026-09-10 Tenant isolation via an EF Core global query filter + exactly one legal `.IgnoreQueryFilters()`
 
-**Контекст:** Stage 2 требовал превратить SEC-filing (грязный HTML, ~1.4 MB) в чанки для будущих эмбеддингов. При ручной проверке на ChunkViz (1000 симв. / 25% overlap) проза резалась нормально, а таблица (Segment Operating Performance у Apple) разрезалась посередине строк — цифры отрывались от подписей регионов.
+**Context:** Stage 1 required more than compiling multi-tenancy via a `TenantId` discriminator + EF Core global query filter — it had to prove the isolation actually holds, including the login flow, where the tenant isn't known yet (emails are globally unique; the tenant is only known after looking up the user).
 
-**Варианты:** (а) единый fixed-size сплиттер по символам поверх всего текста; (б) сплющить всё в Markdown и резать по заголовкам (подход Azure Document Intelligence); (в) типизированная промежуточная модель `DocumentElement` (Heading/Paragraph/Table) + `TextChunker` только для прозы, таблица — отдельный неделимый чанк (как в Unstructured.io).
+**Options:** (a) allow `.IgnoreQueryFilters()` anywhere the code needs to bypass the filter; (b) restrict it to exactly one call site — `UserLookupService.FindByEmailAcrossTenantsAsync` — with an explicit justifying comment, and forbid it everywhere else.
 
-**Решение:** (в). HTML/PDF → `List<DocumentElement>` (`IDocumentReader`, по одной реализации на формат), чанкер режет только прозу (`TextChunker`, 250 токенов / overlap 60, токены — Tiktoken cl100k), каждая таблица — свой `ChunkType.Table`, делится по строкам только если сама больше бюджета.
+**Decision:** (b). The restriction was checked with grep on every task from Task 9 (where the first legal call appeared) through Task 13.
 
-**Почему:** на реальном Apple 10-K FY2025 (1.4 MB HTML → 210 479 символов текста) получилось 296 чанков: 209 прозы и 87 таблиц (29% чанков — таблицы, которые в варианте (а) резались бы посередине); токенов на чанк: min 4 / медиана 201 / p95 236 / max 250 (ни один чанк не выше бюджета — проверяется тестом), весь upload-конвейер 0.75 с. Контрфактический прогон вариантов (а)/(б) на тех же данных не делался — выбор опирается на ручную проверку из контекста и на цифры выше.
+**Why:** a narrow whitelist makes an isolation breach visible in code review instead of dissolving into the rest of the code. Proven by 2 independent tests: `TenantIsolationDbContextTests` (EF level, `AppDbContext` directly, Task 3) and `DocumentTenantIsolationTests` (full HTTP flow — real JWTs from the actual `POST /api/auth/token`, real HTTP requests through `WebApplicationFactory`, Task 13). Final Stage 1 run: 23/23 tests green (11 unit + 12 integration), exactly 1 (one) legal `.IgnoreQueryFilters()` in the whole codebase. Also enforced at the schema level: `Documents.TenantId`/`Users.TenantId` are now real foreign keys to `Tenants.Id` (not just indexes), and `AppDbContext.SaveChanges` unconditionally overwrites `TenantId` on new tenant-owned rows with the current tenant — a client-supplied value can never win (see `TenantScopedWriter` for legitimate writes on behalf of a specific tenant outside the normal request flow, such as seed data).
 
-**Когда пересмотрю:** если eval-сет Stage 4 покажет провал вопросов по таблицам (в частности из-за того, что у поделённых больших таблиц нет повторяющейся строки заголовков и что HtmlDocumentReader отбрасывает пустые ячейки), или если p95 токенов/чанк уйдёт далеко от 250 на банковских filing'ах (JPMorgan).
+**Would revisit when:** a second legitimate cross-tenant scenario appears (for example, a superadmin panel in a later stage) — then add a second explicit, equally narrowly documented call site rather than loosening the rule as a whole.
 
+## 2026-09-18 Tables from a filing become atomic chunks; prose is split by a 250/60 token budget
 
-## 2026-10-05 Модели для `/api/ask`: `gpt-4o` отвечает, `gpt-5-mini` судит — выбор продиктован квотой, а не качеством
+**Context:** Stage 2 had to turn an SEC filing (dirty HTML, ~1.4 MB) into chunks for future embeddings. A manual check in ChunkViz (1,000 chars / 25% overlap) showed prose splitting fine, but a table (Apple's Segment Operating Performance) was cut mid-row — numbers got separated from their region labels.
 
-**Контекст:** Stage 4a требовал две chat-модели на одном Azure-ресурсе: полноразмерную для ответов и **другую** модель-судью для оценки прозаических ответов в eval-харнессе. Research рекомендовал `gpt-6-sol` + судью другого семейства, но подписка — Azure free trial.
+**Options:** (a) a single fixed-size character splitter over all text; (b) flatten everything to Markdown and split by headings (the Azure Document Intelligence approach); (c) a typed intermediate model `DocumentElement` (Heading/Paragraph/Table) + `TextChunker` for prose only, each table its own indivisible chunk (as in Unstructured.io).
 
-**Варианты:** (а) `gpt-6-sol` / `gpt-5.4` для ответов — у обоих 0 TPM квоты во всех типах развертывания (Global, Data Zone, Standard); (б) `gpt-5-mini` на обе роли — единственная новая модель с квотой (500K TPM), но тогда модель судит сама себя, и это reasoning-модель без `reasoning_effort: none`, т.е. без `temperature`; (в) региональный Standard `gpt-4o` (2024-11-20, Sweden Central, 50K TPM) для ответов + `gpt-5-mini` (Global Standard) судьёй.
+**Decision:** (c). HTML/PDF → `List<DocumentElement>` (`IDocumentReader`, one implementation per format); the chunker splits only prose (`TextChunker`, 250 tokens / 60 overlap, tokens counted with Tiktoken cl100k); each table is its own `ChunkType.Table`, split by rows only if it exceeds the budget on its own.
 
-**Решение:** (в). Batch- и Provisioned-типы отброшены: первый асинхронный (до 24 ч), второй — почасовая оплата резерва.
+**Why:** on a real Apple 10-K FY2025 (1.4 MB HTML → 210,479 characters of text) this produced 296 chunks: 209 prose and 87 tables (29% of chunks are tables that option (a) would have cut mid-row); tokens per chunk: min 4 / median 201 / p95 236 / max 250 (no chunk above the budget — enforced by a test); the whole upload pipeline takes 0.75 s. No counterfactual run of options (a)/(b) on the same data — the choice rests on the manual check above and on these numbers.
 
-**Почему:** на странице квот у всех моделей новее `gpt-4o` лимит 0/0 TPM, кроме `gpt-5-mini` (0/500K). `gpt-4o` — не reasoning: проба `POST /api/ask` с `temperature: 0.2` вернула 200 (на reasoning-моделях Azure отвечает 400), ответ «$416,161 million [2][4]» совпал с 10-K, обе цитаты указали на табличные чанки со строкой «Total net sales», 1 305 входных / 21 выходной токен, 0 reasoning-токенов. Судья из другого семейства (GPT-5 против GPT-4o) снимает риск, что модель завышает оценки собственным ответам. 50K TPM хватает с запасом: ~2–3K токенов на вопрос, т.е. 15–20 вопросов в минуту.
+**Would revisit when:** the Stage 4 eval set shows failures on table questions (in particular because split large tables don't repeat their header row and `HtmlDocumentReader` drops empty cells), or p95 tokens/chunk drifts far from 250 on bank filings (JPMorgan).
 
-**Когда пересмотрю:** после апгрейда на Pay-As-You-Go и одобрения квоты на `gpt-6-sol` — сменить `Chat:Deployment` и сравнить прогоны тем же eval-сетом (`compare`); переходить, только если разница в accuracy проходит McNemar p < 0.05.
+## 2026-09-20 Azure OpenAI through the plain `OpenAI` package and the v1 API, without `Azure.AI.OpenAI`
 
-## 2026-10-07 Ограничение «не больше 3 чанков из одного документа» выключено
+**Context:** Stage 3 wired embeddings through the `Microsoft.Extensions.AI` abstraction (`IEmbeddingGenerator`), with Azure OpenAI as the concrete provider. The classic route is `AzureOpenAIClient` from the `Azure.AI.OpenAI` package.
 
-**Контекст:** разбор E1 показал, что на вопросах про 10-Q все 5 источников забирает 10-K того же тенанта. В Stage 4b добавили мягкий лимит `Search:MaxChunksPerDocument` (не больше M из top-K от одного документа, остальные места добираются, только если у другого документа нет кандидатов) и измерили его ступенью b5 лестницы поверх b4 (гибрид + заголовки + склейка коротких чанков + целые дробные числа), 30 вопросов, `gpt-4o`, contextTopK=5.
+**Options:** (a) `Azure.AI.OpenAI` 2.1.0, the latest stable release; (b) an `Azure.AI.OpenAI` 2.x beta; (c) the plain `OpenAIClient` from the `OpenAI` package with `Endpoint = https://<resource>/openai/v1/` — the Azure OpenAI v1 API, GA since August 2025.
 
-**Варианты:** (а) M=3 из 5; (б) без лимита.
+**Decision:** (c). One package for the whole stack: embeddings in Stage 3, the chat client for `/api/ask` and the LLM judge in the eval harness in Stage 4.
 
-**Решение:** (б), лимит выключен (`Search:MaxChunksPerDocument = null`).
+**Why:** `Microsoft.Extensions.AI.OpenAI` 10.10.0 requires `OpenAI >= 2.13.0`, while `Azure.AI.OpenAI` 2.1.0 (2024-12-06) was built against `OpenAI` 2.1.0. Option (a) would mean running the Azure client on top of an assembly 12 minor versions newer than the one it was compiled against; option (b) means a beta package in the dependency graph. The v1 API was verified live: `text-embedding-3-small` embeddings, and later `gpt-4o` and `gpt-5-mini` chat, work on an AI Foundry resource (`*.services.ai.azure.com/openai/v1/`), not only on `*.openai.azure.com`. Microsoft Entra ID authentication (`BearerTokenPolicy` + `DefaultAzureCredential`) lives in the same client — a ready base for managed identity in Stage 6.
 
-**Почему:** с M=3 accuracy упала 70 % → 63 % (потеряны `a-buyback-fy25`, `a-buyback-q3fy26`, `g-eps-2025`, приобретён 1 вопрос), MRR поиска 0.572 → 0.558 — перестановочный тест p = 0.033 (единственное значимое ухудшение на всей лестнице). В источниках видно механику: лимит вытеснял нужные чанки «громкого» документа чанками второго filing'а — у `g-eps-2025` в контекст попала таблица из 10-Q вместо EPS из 10-K. Проблема «10-Q проигрывает 10-K» решается не квотой, а глубиной контекста (см. следующую запись).
+**Would revisit when:** a needed Azure feature is missing from the v1 API's GA subset (e.g. "On Your Data" or deployment-specific parameters), or `Azure.AI.OpenAI` ships a stable release on a current `OpenAI`.
 
-**Когда пересмотрю:** если у тенантов станет много документов одного типа (десятки filing'ов) и один документ начнёт систематически забирать весь top-K на вопросах про другие.
+## 2026-09-20 Vector search is raw SQL with an explicit tenant predicate; isolation is proven by a test with a negative control
 
-## 2026-10-07 Контекст для модели — 10 чанков вместо 5 (`Chat:ContextTopK = 10`)
+**Context:** tenant isolation relies on EF Core's global filter (entry of 2026-09-10). The vector query `ORDER BY "Embedding" <=> @query LIMIT k` doesn't compose in LINQ. A composable `FromSqlRaw` on a mapped entity would get the filter applied, but doesn't allow session control (`SET LOCAL hnsw.ef_search`) or combining two search paths in one SQL statement. So it is the one query in the system the filter cannot reach.
 
-**Контекст:** после лестницы 4b поиск находит нужный чанк в top-10 заметно чаще, чем в top-5 (на ступени b4: hit@10 92 % против hit@5 75 %), а модель получает только 5 источников и в остальных случаях честно отказывает (false answers 0 % на всех ступенях). Эксперимент E4 на конфигурации b4 после исправления дат и названий документов: тот же сервер, тот же eval-сет (`8a02fdeeef19`), меняется только `Chat:ContextTopK`.
+**Options:** (a) composable `FromSqlRaw` over `DbSet<DocumentChunk>`, relying on the filter; (b) non-composable `SqlQueryRaw<T>` over an unmapped type with a hand-written tenant predicate; (c) Postgres Row-Level Security.
 
-**Варианты:** (а) 5 источников; (б) 10 источников.
+**Decision:** (b). The tenant predicate comes before `ORDER BY … LIMIT` (`WHERE c."TenantId" = @tenantId`) and again in `JOIN "Documents" d … AND d."TenantId" = @tenantId`; in Stage 4b's hybrid mode it is repeated in every CTE. RLS was not added: it would be a second, parallel isolation mechanism, while the EF Core filter already covers everything else.
 
-**Решение:** (б), `ContextTopK = 10`.
+**Why:** a "one query bypasses the filter" rule can only be enforced by a test, so the isolation tests are a required deliverable. There are now 11 of them in 8 classes at five levels: EF Core, HTTP with real JWTs, raw vector SQL, hybrid SQL and `/api/ask` (another tenant's chunks never reach the model). The key test seeds identical chunk text into two tenants, and tenant B's search never returns tenant A's rows. Its paired negative control runs the same query without the predicate and sees both tenants' rows — proving the isolation comes from the predicate, not from the table. `.IgnoreQueryFilters()` in all of `src/` is still exactly 1.
 
-**Почему:** accuracy 70 % → 83 %, ложные отказы 25 % → 12 %, ложных ответов по-прежнему 0 %. Переворотов 4:0 в пользу 10 (`a-buyback-fy25`, `a-china-fy25`, `g-branches`, `g-cet1-delta`), ни один вопрос не потерян; McNemar p = 0.125 — направление однозначное, но при n = 30 до порога 0.05 не дотягивает. Цена: входные токены 36.8 K → 65.6 K на прогон (+79 %), латентность p50 1 046 → 1 414 мс. При ~1 200 входных токенов на вопрос это всё ещё доли цента за ответ.
+**Would revisit when:** an HNSW index arrives that filters after the scan (pgvector warns about this for multi-tenant tables) — then partition by tenant or use partial indexes. If raw queries grow beyond one or two — then RLS as a second barrier.
 
-**Когда пересмотрю:** после расширения eval-сета (нужно n побольше, чтобы подтвердить эффект при p < 0.05), или если стоимость/латентность станет ограничением — тогда пробовать переранжирование top-10 → top-5 вместо простого расширения контекста.
+## 2026-10-05 Models for `/api/ask`: `gpt-4o` answers, `gpt-5-mini` judges — chosen by quota, not quality
 
-## 2026-10-07 Гибридный поиск (Postgres FTS + RRF) не включаем — на этом корпусе он ничего не дал
+**Context:** Stage 4a needed two chat models on one Azure resource: a full-size one for answers and a **different** judge model to grade prose answers in the eval harness. The research recommended `gpt-6-sol` + a judge from another family, but the subscription is an Azure free trial.
 
-**Контекст:** E0/E1 показали, что таблицы с числами проигрывают прозе на ту же тему; гибридный поиск (встроенный FTS `english` + косинус, слияние RRF k=60 одним SQL с тенант-предикатом в каждой CTE) был первой гипотезой. Измерен ступенью b1 лестницы 4b поверх baseline b0 (vector-only), 30 вопросов, `gpt-4o`, contextTopK=5.
+**Options:** (a) `gpt-6-sol` / `gpt-5.4` for answers — both have 0 TPM quota in every deployment type (Global, Data Zone, Standard); (b) `gpt-5-mini` in both roles — the only new model with quota (500K TPM), but then the model grades itself, and it's a reasoning model without `reasoning_effort: none`, i.e. without `temperature`; (c) regional Standard `gpt-4o` (2024-11-20, Sweden Central, 50K TPM) for answers + `gpt-5-mini` (Global Standard) as the judge.
 
-**Варианты:** (а) только вектор; (б) гибрид FTS + RRF; (в) BM25-расширение (`pg_textsearch`/ParadeDB) — не пробовали.
+**Decision:** (c). Batch and Provisioned deployment types were ruled out: the first is asynchronous (up to 24 h), the second bills reserved capacity by the hour.
 
-**Решение:** (а). Код гибрида остаётся за переключателем `Search:Mode` (по умолчанию `Vector`).
+**Why:** on the quota page every model newer than `gpt-4o` shows 0/0 TPM except `gpt-5-mini` (0/500K). `gpt-4o` is not a reasoning model: a `POST /api/ask` probe with `temperature: 0.2` returned 200 (Azure returns 400 on reasoning models); the answer "$416,161 million [2][4]" matched the 10-K, both citations pointed at table chunks with the "Total net sales" row, 1,305 input / 21 output tokens, 0 reasoning tokens. A judge from another family (GPT-5 vs GPT-4o) removes the risk of a model inflating scores for its own answers. 50K TPM is ample: ~2–3K tokens per question, i.e. 15–20 questions a minute.
 
-**Почему:** accuracy 70 % → 70 %, переворотов 3:3 (потеряны `a-net-sales-fy25`, `a-services-fy25`, `g-cet1-q2-26`; приобретены `a-siri-ai`, `a-dividend-change`, `g-apple-card-allowance`), McNemar p = 1.0; hit@5 71 % → 67 %, MRR 0.590 → 0.550 (p = 0.62). Цена при этом ненулевая: в контекст уходит на ~27 % больше токенов (средний объём источников 818 → 1 036), p50 ответа 924 → 1 175 мс, плюс второй путь на сыром SQL, который надо держать под тестом изоляции. Механика видна в источниках: встроенное ранжирование `ts_rank_cd` не учитывает IDF, поэтому проза с частыми словами («Services net sales include amortization…») поднимается над таблицей, где лежит само число; выигрыш на редких словах (Siri AI, Apple Card) съедается этим проигрышем. Отказ подтверждён контрольным прогоном итоговой конфигурации (вектор + заголовки + целые дробные числа, contextTopK=10): accuracy 87 % без гибрида и склейки против 83 % с ними (E4), переворотов 2:1, p = 1.0; входных токенов 56.8 K против 65.6 K, p50 948 против 1 414 мс.
+**Would revisit when:** after upgrading to Pay-As-You-Go and getting `gpt-6-sol` quota approved — switch `Chat:Deployment` and compare runs on the same eval set (`compare`); switch only if the accuracy difference passes McNemar p < 0.05.
 
-**Когда пересмотрю:** если в eval-сете станет больше вопросов на точные коды и термины, или с BM25 (учёт редкости слова) вместо `ts_rank_cd` — это отдельный эксперимент, а не включение текущего переключателя.
+## 2026-10-06 Chunking parameters are stored on the document (ingest profile); the harness checks the corpus before a run
 
-## 2026-10-07 Склейку коротких чанков (`MergeBelowTokens`) не включаем
+**Context:** the first E0 baseline (2026-10-05) showed hit@5 52 %, MRR 0.375, accuracy 57 %. The run header said `chunking 250/60` — it is filled from `GET /api/settings`. The harness flagged 4 questions as unlabelable: their anchors matched no chunk. Querying the database showed max `TokenCount` of 401, 405 and 477 in three of the four documents. Chunks that size can't exist under a 250 budget: the documents were left over from a manual 400/100 experiment in Stage 3 and were never re-uploaded. `/api/settings` truthfully reported the server's config *now*, while the chunks in the database reflected the config *at upload time*.
 
-**Контекст:** в top-5 попадали чанки-колонтитулы и обрывки таблиц по 10–20 токенов («Apple Inc. | 2025 Form 10-K | 56»); в JPM 10-K таких было 19 %. Склейка чанков ≤ 20 токенов с соседом (без выхода за бюджет 250) измерена ступенью b3 поверх b2.
+**Options:** (a) a process rule: "after changing `Chunking`, re-upload everything"; (b) store the chunking parameters on the document itself and check them mechanically.
 
-**Варианты:** (а) не склеивать; (б) склеивать чанки ≤ 20 токенов.
+**Decision:** (b). Every `Document` gets an `IngestProfile` string at upload (e.g. `chunk=250/60;hdr=v1;merge=0;dec=v1`). It is returned by `GET /api/documents`, and the current config's profile by `GET /api/settings`. The harness exits with code 1 on any mismatch, before the first question, and writes the corpus (tenant / document / profile / chunk count) into `run.json`. The same principle was already in place for embeddings since Stage 3: an `EmbeddingModel` column on every chunk + a model filter in the search SQL, plus all-or-nothing upload. Chunking had no equivalent, and that cost an invalid baseline.
 
-**Решение:** (а), `Chunking:MergeBelowTokens = 0`.
+**Why:** after re-chunking the whole corpus under 250/60 (and uploading the missing JPM 10-Q), hit@5 went 52 % → 71 %, MRR 0.375 → 0.590, accuracy 57 % → 67 %. Caveat: three things changed at once (re-chunking, the extra document, three anchor fixes), so this is not a "400 vs 250" measurement but the cost of a mixed corpus. It was caught because the eval set is labelled with verbatim anchor phrases, not chunk ids. Anchors survive re-chunking (eval set `8a02fdeeef19` went through all 22 Stage 4b runs without a single edit — both on Apple 10-K's 296 chunks without headers and its 405 chunks with headers), and the anchor lint, built for re-chunking, worked as a "something is wrong with the corpus" detector. All 22 runs after the profile was introduced record the corpus and profile in `run.json`, with no mismatches.
 
-**Почему:** задачу она решила механически — на Apple 10-K чанков ≤ 20 токенов стало 7 → 0 (296 → 289 чанков), — но на качество не повлияла: accuracy 67 % → 67 %, переворотов 1:1 (`a-gm-pct-fy25` ↔ `a-buyback-q3fy26`), McNemar p = 1.0; MRR поиска 0.490 → 0.490 (p = 1.0). Колонтитулы, как выяснилось, не были причиной промахов — их вытесняли и так. При этом склейка меняет текст осмысленных чанков (в конец таблицы дописывается чужой колонтитул) и добавляет ещё один шаг ингеста, который нужно поддерживать. Отказ подтверждён контрольным прогоном итоговой конфигурации (вектор + заголовки + целые дробные числа, contextTopK=10): accuracy 87 % без гибрида и склейки против 83 % с ними (E4), переворотов 2:1, p = 1.0; входных токенов 56.8 K против 65.6 K, p50 948 против 1 414 мс.
+**Would revisit when:** a reindex-from-stored-raw-file feature appears. Then the profile turns from a check into a trigger: a document with a stale profile could be re-chunked automatically instead of blocking the run.
 
-**Когда пересмотрю:** если появятся документы с большим числом мелких фрагментов, которые реально занимают места в контексте (например, PDF с разбитыми по страницам таблицами).
+## 2026-10-07 The "at most 3 chunks per document" cap is turned off
 
-## 2026-10-07 Контекстный заголовок у каждого чанка оставляем (`Chunking:ContextHeaders = true`)
+**Context:** the E1 analysis showed that on 10-Q questions all 5 sources were taken by the same tenant's 10-K. Stage 4b added a soft cap, `Search:MaxChunksPerDocument` (at most M of the top-K from one document; remaining slots are filled past the cap only if no other document has candidates), measured as ladder step b5 on top of b4 (hybrid + headers + short-chunk merging + whole decimals), 30 questions, `gpt-4o`, contextTopK=5.
 
-**Контекст:** табличный чанк — это подписи строк и цифры без подписи таблицы, раздела и названия документа, а 10-Q и 10-K одной компании почти неотличимы по тексту. Заголовок вида «Apple 10-K (filed 2025-09-27) — Gross Margin» хранится отдельно от текста (`ContextHeader`) и добавляется к тексту только для эмбеддинга и FTS; промпт не меняется. Чтобы у чанка был однозначный раздел, проза при включённых заголовках режется на границе раздела — поэтому шаг меряет «заголовок + более мелкую нарезку» вместе (Apple 10-K 296 → 405 чанков). Ступень b2 поверх b1.
+**Options:** (a) M=3 of 5; (b) no cap.
 
-**Варианты:** (а) без заголовков; (б) с заголовками.
+**Decision:** (b), cap off (`Search:MaxChunksPerDocument = null`).
 
-**Решение:** (б).
+**Why:** with M=3 accuracy dropped 70 % → 63 % (lost `a-buyback-fy25`, `a-buyback-q3fy26`, `g-eps-2025`, gained 1 question), retrieval MRR 0.572 → 0.558 — permutation test p = 0.033 (the only significant regression on the whole ladder). The sources show the mechanism: the cap pushed the right chunks of the "loud" document out in favour of chunks from the second filing — for `g-eps-2025` the context got a 10-Q table instead of the EPS from the 10-K. "10-Q loses to 10-K" is solved by context depth, not by a quota (see the next entry).
 
-**Почему:** заголовки ухудшили верх выдачи и улучшили полноту: hit@1 46 % → 33 %, MRR 0.550 → 0.490 (p = 0.29), но hit@10 67 % → 92 % (одинаковый заголовок у чанков документа делает их похожими, поэтому нужный чанк реже первый, но чаще в десятке). При 5 источниках это давало ноль (accuracy 70 % → 67 %, 3:2, p = 1.0), а после перехода на 10 источников полнота top-10 стала тем, что модель реально видит: итоговая конфигурация (вектор + заголовки + целые дробные числа, contextTopK=10) — accuracy 87 %, hit@5 83 %, hit@10 92 %, MRR 0.633, против baseline b0 70 % (7:2, p = 0.18). Чистого замера «10 источников без заголовков» нет — решение опирается на рост hit@10, а не на изолированный эффект на accuracy. Попутно: ранжирование чувствительно к тексту заголовка — исправление дат и одного названия документа сдвинуло hit@10 на 9 п.п. без смены конфигурации.
+**Would revisit when:** tenants hold many documents of the same type (dozens of filings) and one document starts systematically taking the whole top-K on questions about the others.
 
-**Когда пересмотрю:** замерить contextTopK=10 без заголовков; если accuracy не хуже — убрать (меньше чанков, проще ингест). Также стоит попробовать заголовок только для FTS или только с названием раздела, без даты и документа.
+## 2026-10-07 Context for the model: 10 chunks instead of 5 (`Chat:ContextTopK = 10`)
 
-## 2026-10-07 Целые дробные числа при нарезке включаем (`Chunking:ProtectDecimals = true`)
+**Context:** after the 4b ladder, retrieval finds the right chunk in the top 10 much more often than in the top 5 (at step b4: hit@10 92 % vs hit@5 75 %), yet the model only gets 5 sources and honestly refuses otherwise (0 % false answers at every step). Experiment E4 on the b4 configuration after fixing document dates and titles: same server, same eval set (`8a02fdeeef19`), only `Chat:ContextTopK` changes.
 
-**Контекст:** в 4 % чанков (148 из 3 768) числа были разорваны: «$10. 7 billion», «$19.\n8 billion». Сначала подозревали HTML-ридер, но в сохранённом тексте документа число целое — его рвёт `TextChunker.SplitPlainTextLines` внутри `Chunker`, который режет длинную строку по точке, в том числе по точке внутри числа. Исправление: перед разбиением точка между цифрами заменяется на символ-заглушку, после — возвращается. Ступень b4 поверх b3.
+**Options:** (a) 5 sources; (b) 10 sources.
 
-**Варианты:** (а) оставить как есть; (б) защищать дробные числа при нарезке.
+**Decision:** (b), `ContextTopK = 10`.
 
-**Решение:** (б).
+**Why:** accuracy 70 % → 83 %, false refusals 25 % → 12 %, false answers still 0 %. Flips 4:0 in favour of 10 (`a-buyback-fy25`, `a-china-fy25`, `g-branches`, `g-cet1-delta`), no question lost; McNemar p = 0.125 — the direction is unambiguous, but with n = 30 it doesn't reach 0.05. Cost: input tokens 36.8K → 65.6K per run (+79 %), latency p50 1,046 → 1,414 ms. At ~1,200 input tokens per question that is still a fraction of a cent per answer.
 
-**Почему:** на Apple 10-K разорванных чисел 8 из 296 чанков → 0. Это единственная ступень лестницы со статистически значимым улучшением поиска: MRR 0.490 → 0.572, перестановочный тест p = 0.0085 (retrieval) и p = 0.032 (full); hit@5 67 % → 75 %; accuracy 67 % → 70 % (2:1, p = 1.0). Цена — нулевая: ни токенов, ни латентности, одна регулярка в чанкере.
+**Would revisit when:** the eval set grows (a larger n is needed to confirm the effect at p < 0.05), or cost/latency becomes a constraint — then try reranking top-10 → top-5 instead of simply widening the context.
 
-**Когда пересмотрю:** если сменится сплиттер (собственная нарезка вместо `TextChunker`) — тогда защита станет не нужна.
+## 2026-10-07 Hybrid search (Postgres FTS + RRF) stays off — it bought nothing on this corpus
 
-## 2026-10-07 Temperature 0.2 — не рычаг качества на этой задаче (E5)
+**Context:** E0/E1 showed tables with numbers losing to prose on the same topic; hybrid search (built-in `english` FTS + cosine, fused with RRF k=60 in one SQL statement with the tenant predicate in each CTE) was the first hypothesis. Measured as ladder step b1 on top of baseline b0 (vector only), 30 questions, `gpt-4o`, contextTopK=5.
 
-**Контекст:** `gpt-4o` принимает `temperature` (проба 2026-10-05), и в плане этапа был отдельный эксперимент E5 — как temperature влияет на точность и стабильность. Итоговая конфигурация (вектор + заголовки + целые дробные числа, contextTopK=10), 30 вопросов, каждый задан 3 раза (90 ответов на значение).
+**Options:** (a) vector only; (b) hybrid FTS + RRF; (c) a BM25 extension (`pg_textsearch`/ParadeDB) — not tried.
 
-**Варианты:** temperature 0, 0.2, 0.6.
+**Decision:** (a). The hybrid code stays behind the `Search:Mode` switch (default `Vector`).
 
-**Решение:** оставить 0.2 (на ней сделаны все замеры этапа); значение записано в `appsettings.json` по умолчанию.
+**Why:** accuracy 70 % → 70 %, flips 3:3 (lost `a-net-sales-fy25`, `a-services-fy25`, `g-cet1-q2-26`; gained `a-siri-ai`, `a-dividend-change`, `g-apple-card-allowance`), McNemar p = 1.0; hit@5 71 % → 67 %, MRR 0.590 → 0.550 (p = 0.62). The cost is not zero: ~27 % more tokens go into the context (mean source volume 818 → 1,036), answer p50 924 → 1,175 ms, plus a second raw-SQL path that has to stay under the isolation test. The sources show the mechanism: the built-in `ts_rank_cd` ranking has no IDF, so prose full of common words ("Services net sales include amortization…") rises above the table holding the actual number; the gains on rare words (Siri AI, Apple Card) are eaten by that loss. Confirmed by a control run of the final configuration (vector + headers + whole decimals, contextTopK=10): accuracy 87 % without hybrid and merging vs 83 % with them (E4), flips 2:1, p = 1.0; input tokens 56.8K vs 65.6K, p50 948 vs 1,414 ms.
 
-**Почему:** accuracy одинаковая на всех трёх значениях — 87 %; ни один вопрос не поменял вердикт между тремя повторами ни при 0, ни при 0.6 (stability 0 %); ложных ответов 0 % везде. Ответы короткие и привязаны к числу из источника — выборке просто не во что «разбрестись». Цена тоже не меняется (170 K входных токенов на 90 ответов), p50 976 / 1 065 / 1 127 мс — в пределах шума.
+**Would revisit when:** the eval set gets more questions on exact codes and terms, or with BM25 (which accounts for word rarity) instead of `ts_rank_cd` — that's a separate experiment, not flipping the current switch.
 
-**Когда пересмотрю:** если появятся вопросы с длинными объяснениями (например, «почему…» на несколько абзацев) или сменится модель — особенно на reasoning-модель, где вместо temperature варьируется `ReasoningEffort`.
+## 2026-10-07 Short-chunk merging (`MergeBelowTokens`) stays off
 
-## 2026-10-07 Промпт и векторный индекс не трогаем (E6, E7 не нужны)
+**Context:** footer chunks and table fragments of 10–20 tokens ("Apple Inc. | 2025 Form 10-K | 56") were landing in the top 5; 19 % of JPM 10-K chunks were like that. Merging chunks ≤ 20 tokens into a neighbour (without exceeding the 250 budget) was measured as ladder step b3 on top of b2.
 
-**Контекст:** план этапа включал E6 (правка промпта и формулировки отказа) и E7 (ANN-индекс HNSW вместо точного поиска).
+**Options:** (a) don't merge; (b) merge chunks ≤ 20 tokens.
 
-**Варианты:** делать эксперименты или закрыть их по данным уже сделанных прогонов.
+**Decision:** (a), `Chunking:MergeBelowTokens = 0`.
 
-**Решение:** закрыть без экспериментов.
+**Why:** it solved the problem mechanically — on the Apple 10-K chunks ≤ 20 tokens went 7 → 0 (296 → 289 chunks) — but had no effect on quality: accuracy 67 % → 67 %, flips 1:1 (`a-gm-pct-fy25` ↔ `a-buyback-q3fy26`), McNemar p = 1.0; retrieval MRR 0.490 → 0.490 (p = 1.0). The footers turned out not to be the cause of misses — they were being pushed out anyway. Meanwhile merging alters the text of meaningful chunks (a stray footer gets appended to the end of a table) and adds one more ingest step to maintain. Confirmed by a control run of the final configuration (vector + headers + whole decimals, contextTopK=10): accuracy 87 % without hybrid and merging vs 83 % with them (E4), flips 2:1, p = 1.0; input tokens 56.8K vs 65.6K, p50 948 vs 1,414 ms.
 
-**Почему:** E6 — ложных ответов 0 % во всех ~20 полных прогонах этапа (включая 4 вопроса без ответа в документах и ловушки чужого тенанта); все отказы, которые мы разбирали, были вызваны отсутствием нужного факта в контексте, а не строгостью промпта — чинить нечего. E7 — точный поиск по ~5 000 чанкам двух тенантов занимает ~300 мс (p50 retrieval-прогонов 270–390 мс), HNSW дал бы выигрыш в миллисекундах ценой приближённой выдачи и отдельной настройки тенант-фильтра (`hnsw.ef_search`, итеративные сканы).
+**Would revisit when:** documents arrive with many small fragments that really do take context slots (e.g. PDFs with tables split across pages).
 
-**Когда пересмотрю:** E6 — если появятся ложные ответы или модель сменится; E7 — когда корпус вырастет на порядок (десятки тысяч чанков на тенанта) и p50 поиска перевалит за ~1 с.
+## 2026-10-07 A context header on every chunk stays on (`Chunking:ContextHeaders = true`)
+
+**Context:** a table chunk is row labels and numbers with no table caption, section or document name, and a company's 10-Q and 10-K are nearly indistinguishable by text. A header such as "Apple 10-K (filed 2025-09-27) — Gross Margin" is stored separately from the text (`ContextHeader`) and prepended only for embedding and FTS; the prompt doesn't change. So that each chunk has an unambiguous section, prose is split at section boundaries when headers are on — so this step measures "header + finer chunking" together (Apple 10-K 296 → 405 chunks). Step b2 on top of b1.
+
+**Options:** (a) no headers; (b) headers.
+
+**Decision:** (b).
+
+**Why:** headers hurt the top of the ranking and improved recall: hit@1 46 % → 33 %, MRR 0.550 → 0.490 (p = 0.29), but hit@10 67 % → 92 % (the shared header makes a document's chunks resemble each other, so the right chunk is less often first but more often in the top ten). With 5 sources this gave nothing (accuracy 70 % → 67 %, 3:2, p = 1.0), but after moving to 10 sources top-10 recall became what the model actually sees: the final configuration (vector + headers + whole decimals, contextTopK=10) — accuracy 87 %, hit@5 83 %, hit@10 92 %, MRR 0.633, vs baseline b0 at 70 % (7:2, p = 0.18). There's no clean "10 sources without headers" measurement — the decision rests on the hit@10 gain, not an isolated effect on accuracy. Side note: ranking is sensitive to header text — fixing dates and one document title moved hit@10 by 9 points with no config change.
+
+**Would revisit when:** after measuring contextTopK=10 without headers; if accuracy is no worse, remove them (fewer chunks, simpler ingest). Also worth trying a header for FTS only, or with only the section name, without date and document.
+
+## 2026-10-07 Whole decimal numbers during chunking stay on (`Chunking:ProtectDecimals = true`)
+
+**Context:** in 4 % of chunks (148 of 3,768) numbers were broken: "$10. 7 billion", "$19.\n8 billion". The HTML reader was suspected first, but in the stored document text the number is intact — it's broken by `TextChunker.SplitPlainTextLines` inside `Chunker`, which splits long lines at periods, including a period inside a number. Fix: before splitting, a period between digits is replaced with a placeholder character, and restored afterwards. Step b4 on top of b3.
+
+**Options:** (a) leave as is; (b) protect decimals during splitting.
+
+**Decision:** (b).
+
+**Why:** on the Apple 10-K, broken numbers went from 8 of 296 chunks → 0. This is the only ladder step with a statistically significant retrieval improvement: MRR 0.490 → 0.572, permutation test p = 0.0085 (retrieval) and p = 0.032 (full); hit@5 67 % → 75 %; accuracy 67 % → 70 % (2:1, p = 1.0). Cost is zero: no tokens, no latency, one regex in the chunker.
+
+**Would revisit when:** the splitter changes (custom splitting instead of `TextChunker`) — then the protection is no longer needed.
+
+## 2026-10-07 Temperature 0.2 is not a quality lever on this task (E5)
+
+**Context:** `gpt-4o` accepts `temperature` (probe of 2026-10-05), and the stage plan had a separate experiment E5 — how temperature affects accuracy and stability. Final configuration (vector + headers + whole decimals, contextTopK=10), 30 questions, each asked 3 times (90 answers per value).
+
+**Options:** temperature 0, 0.2, 0.6.
+
+**Decision:** keep 0.2 (every measurement of the stage was made with it); the value is the default in `appsettings.json`.
+
+**Why:** accuracy is identical at all three values — 87 %; not a single question changed verdict across the three repeats at either 0 or 0.6 (stability 0 %); false answers 0 % everywhere. The answers are short and anchored to a number from a source — sampling has nowhere to wander. Cost doesn't change either (170K input tokens per 90 answers); p50 976 / 1,065 / 1,127 ms — within noise.
+
+**Would revisit when:** questions needing long explanations appear (e.g. multi-paragraph "why…" answers) or the model changes — especially to a reasoning model, where `ReasoningEffort` is varied instead of temperature.
+
+## 2026-10-07 The prompt and the vector index stay as they are (E6, E7 not needed)
+
+**Context:** the stage plan included E6 (editing the prompt and refusal wording) and E7 (an HNSW ANN index instead of exact search).
+
+**Options:** run the experiments, or close them based on the data from runs already done.
+
+**Decision:** close them without experiments.
+
+**Why:** E6 — 0 % false answers in all 15 full runs of the stage (including 4 questions with no answer in the documents and the cross-tenant traps); every refusal we analysed was caused by the needed fact missing from the context, not by an overly strict prompt — there's nothing to fix. E7 — exact search over ~5,000 chunks across two tenants takes ~300 ms (retrieval-run p50 270–390 ms); HNSW would win milliseconds at the cost of approximate results and separate tuning of the tenant filter (`hnsw.ef_search`, iterative scans).
+
+**Would revisit when:** E6 — if false answers appear or the model changes; E7 — when the corpus grows by an order of magnitude (tens of thousands of chunks per tenant) and search p50 exceeds ~1 s.

@@ -71,6 +71,7 @@ Chunk size/overlap strategy, exact eval question content, retrieval tuning (hybr
 
 ## Documentation conventions
 
+- **`README.md` and `DECISIONS.md` are written in English only** — both are public-facing (recruiters, interviewers, other developers). This holds even when the conversation with the user is in Russian; translate any Russian notes from `.research/` when carrying them over.
 - **`DECISIONS.md`** (repo root, tracked in git) — after each stage, 3-6 lines: context → alternatives → decision → why (with a number) → when I'd reconsider. This is the interview-prep artifact; don't let it turn into a changelog. **Only real, evidenced decisions go in it — no example/placeholder entries, ever**, even to illustrate the format (the template alone is enough for that).
 - **`.research/`** (gitignored) — investigation notes, one file per topic (never one giant file), plus its own `README.md` index. Superpowers spec docs also go here instead of the usual `docs/superpowers/specs/` default.
 
