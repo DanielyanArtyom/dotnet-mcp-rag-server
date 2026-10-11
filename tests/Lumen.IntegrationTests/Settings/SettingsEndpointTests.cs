@@ -45,6 +45,7 @@ public class SettingsEndpointTests(PostgresFixture fixture) : IAsyncLifetime
         Assert.Equal(250, root.GetProperty("chunking").GetProperty("maxTokensPerChunk").GetInt32());
         Assert.Equal("vector", root.GetProperty("searchMode").GetString());
         Assert.Matches("^[0-9a-f]{12}$", root.GetProperty("promptHash").GetString());
+        Assert.False(root.GetProperty("mcp").GetProperty("contextTool").GetBoolean());
     }
 
     [Fact]

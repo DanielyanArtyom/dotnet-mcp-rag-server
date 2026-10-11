@@ -72,4 +72,58 @@ public class RunSummaryBuilderTests
         Assert.Equal(1, summary.RetrievalQuestions);
         Assert.Equal(1.0, summary.HitAt1);
     }
+
+    [Fact]
+    public void Agent_runs_report_accuracy_and_use_retrieved_relevant_for_the_grid()
+    {
+        var results = new List<QuestionResult>
+        {
+            new() { Id = "a", Category = "c", ExpectedKind = ExpectedKind.Number, Labelable = true, RetrievedRelevant = true, Correct = true, Refused = false, ToolCalls = ["s", "s"] },
+            new() { Id = "b", Category = "c", ExpectedKind = ExpectedKind.Number, Labelable = true, RetrievedRelevant = false, Correct = false, Refused = true, ToolCalls = ["s"] },
+            new() { Id = "c", Category = "c", ExpectedKind = ExpectedKind.Refusal, Correct = true, Refused = true, ToolCalls = [] }
+        };
+
+        var summary = RunSummaryBuilder.Build(results, RunMode.Agent, null);
+
+        Assert.Equal(2 / 3.0, summary.Accuracy!.Value, 3);
+        Assert.Equal(0.0, summary.FalseAnswerRate);
+        Assert.Equal(0.5, summary.FalseRefusalRate);
+        Assert.Equal(0.5, summary.RetrievedRelevantRate);
+        Assert.Equal(1.0, summary.MeanToolCalls);
+        Assert.Equal(1, summary.Grid.HitCorrect);
+        Assert.Equal(1, summary.Grid.MissWrong);
+    }
+
+    [Fact]
+    public void Agent_cost_is_the_sum_of_the_cli_reported_costs()
+    {
+        var results = new List<QuestionResult>
+        {
+            new() { Id = "a", Category = "c", ExpectedKind = ExpectedKind.Refusal, Correct = true, Refused = true, AgentCostUsd = 0.01m },
+            new() { Id = "b", Category = "c", ExpectedKind = ExpectedKind.Refusal, Correct = true, Refused = true, AgentCostUsd = 0.02m }
+        };
+
+        Assert.Equal(0.03m, RunSummaryBuilder.Build(results, RunMode.Agent, null).CostUsd);
+    }
+
+    [Fact]
+    public void Agent_runs_report_no_ranking_metrics_and_a_per_category_relevant_seen_rate()
+    {
+        var results = new List<QuestionResult>
+        {
+            new() { Id = "a", Category = "c", ExpectedKind = ExpectedKind.Number, Labelable = true, RetrievedRelevant = true, Correct = true },
+            new() { Id = "b", Category = "c", ExpectedKind = ExpectedKind.Number, Labelable = true, RetrievedRelevant = false, Correct = false }
+        };
+
+        var summary = RunSummaryBuilder.Build(results, RunMode.Agent, null);
+
+        Assert.Null(summary.HitAt1);
+        Assert.Null(summary.HitAt5);
+        Assert.Null(summary.HitAt10);
+        Assert.Null(summary.Mrr);
+        var category = Assert.Single(summary.ByCategory);
+        Assert.Null(category.HitAt5);
+        Assert.Null(category.Mrr);
+        Assert.Equal(0.5, category.RetrievedRelevantRate);
+    }
 }

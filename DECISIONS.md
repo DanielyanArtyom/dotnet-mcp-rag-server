@@ -201,3 +201,63 @@ Entries are kept in chronological order, which is also stage order. Written in E
 **Why:** E6 — 0 % false answers in all 15 full runs of the stage (including 4 questions with no answer in the documents and the cross-tenant traps); every refusal we analysed was caused by the needed fact missing from the context, not by an overly strict prompt — there's nothing to fix. E7 — exact search over ~5,000 chunks across two tenants takes ~300 ms (retrieval-run p50 270–390 ms); HNSW would win milliseconds at the cost of approximate results and separate tuning of the tenant filter (`hnsw.ef_search`, iterative scans).
 
 **Would revisit when:** E6 — if false answers appear or the model changes; E7 — when the corpus grows by an order of magnitude (tens of thousands of chunks per tenant) and search p50 exceeds ~1 s.
+
+## 2026-10-11 The MCP server's transport is stateless, because tenant isolation depends on it
+
+**Context:** Stage 5 exposes search as an MCP server (`ModelContextProtocol.AspNetCore` 2.2.0, Streamable HTTP). The tenant comes from the JWT: `TenantResolutionMiddleware` writes `tenant_id` into a scoped `CurrentTenant`, which the EF global filter and the raw-SQL search both read. The SDK offers stateless and stateful session modes.
+
+**Options:** (a) stateful sessions (server-to-client requests, resumable streams); (b) stateless, every POST independent.
+
+**Decision:** (b), set explicitly (`SessionMode = Stateless`) with a comment that isolation depends on it.
+
+**Why:** reading the SDK source showed that only in stateless mode does a tool run inside the HTTP request's DI scope; in stateful mode each tool call gets a fresh scope from the root provider. Verified with the isolation test: switched to stateful, the tool saw an empty tenant, and the test's positive control (tenant B must find its own document) failed with an empty collection — while a negative-only test ("never returns tenant A's chunk") still passed. So it fails closed rather than leaking, but silently, and a test without a positive control would not notice. All MCP isolation tests now assert both directions. Stateless also needs no sticky sessions on App Service (Stage 6).
+
+**Would revisit when:** a feature needs server-to-client requests (sampling, elicitation) — then the tenant has to be re-resolved inside the tool from the request's claims instead of relying on the shared scope.
+
+## 2026-10-11 MCP exposes search only; no server-side `ask` tool
+
+**Context:** an MCP client is itself a strong model, so the tool surface could be raw retrieval (`search_filings`, `list_filings`; the client writes the answer) or also wrap `/api/ask` (our gpt-4o RAG with citations). Measured with a new harness mode that answers each eval question through `claude -p` + the MCP tools (`claude-sonnet-5`), against the Stage 4 final `/api/ask` run, same 30 questions and corpus.
+
+**Options:** (a) search + list only; (b) only `ask`; (c) both.
+
+**Decision:** (a).
+
+**Why:** the agent with search tools matches the server-side pipeline: accuracy 87 % vs 87 % (3 questions gained, 3 lost, McNemar p = 1.0). It rephrases and searches again when the first query misses (1.2 tool calls per question) — e.g. it found the income-statement table that the first query's top 20 did not contain. Wrapping `/api/ask` would add no accuracy and would nest one model inside another. The trade-offs: ~9× the cost ($1.37 per 30-question run vs about $0.15 of gpt-4o tokens) and ~8× the latency (p50 8.1 s vs 0.95 s); and a weaker refusal discipline — 2 of 6 should-refuse questions got "not disclosed, but here are related figures" instead of the fixed refusal sentence (0 of 6 for `/api/ask`). Neither was a fabrication. Side finding: the agent read the filing title "Morgan 10-K" as Morgan Stanley and refused two JPMorgan questions without searching — for an agent, document metadata is part of the interface.
+
+**Would revisit when:** clients need a guaranteed refusal sentence or cheaper answers (then add `ask_filings` with a description that says when to prefer it), or the client model is weak enough that our pipeline beats it.
+
+## 2026-10-11 The neighbour-chunk tool (`get_chunk_context`) stays switched off
+
+**Context:** split tables lose their header row and caption; a tool returning a chunk's neighbours by `ChunkIndex` was built behind `Mcp:ContextTool` so the agent could fetch them. Measured as M2: the agent run from the previous entry with the tool enabled.
+
+**Options:** (a) expose it; (b) keep it off.
+
+**Decision:** (b), `Mcp:ContextTool = false` by default; the code stays.
+
+**Why:** the agent never called it — 0 calls in 30 questions, accuracy 87 % again, 0 gained / 0 lost against the run without it. With topK = 10 and section headers on every chunk, the search results were enough. A tool the model ignores only adds to the tool list it has to read.
+
+**Would revisit when:** the eval set gets questions whose answer needs rows from both halves of a split table, or the default `topK` is lowered.
+
+## 2026-10-11 MCP clients authenticate with the existing JWT through a token helper, not OAuth
+
+**Context:** the MCP endpoint needed authentication that carries `tenant_id`. The MCP spec's answer for protected HTTP servers is OAuth 2.1 with Protected Resource Metadata; Lumen has a self-issued JWT with a 60-minute lifetime and no authorization server.
+
+**Options:** (a) the same JWT, sent by the client as `Authorization: Bearer`, refreshed by Claude Code's `headersHelper`; (b) long-lived personal access tokens; (c) OAuth 2.1 (OpenIddict or Entra ID) plus PRM.
+
+**Decision:** (a). No `/.well-known/oauth-protected-resource`: without an authorization server it cannot be valid (`authorization_servers` must be non-empty).
+
+**Why:** zero new auth code, and verified live: a helper that hands out an invalid token first makes Claude Code get a 401, re-run the helper and retry — the call succeeds with no user action. `tools/mcp/lumen-token.sh` logs in and prints the header. The cost shows when the header is missing: both Claude Code and MCP Inspector fall back to OAuth discovery and Dynamic Client Registration and get 404s. So the clients are ready for (c), and Claude Desktop / claude.ai — which need OAuth — stay unsupported. PATs (b) would add a token table and a second cross-tenant lookup (`IgnoreQueryFilters`) for a convenience the demo doesn't need.
+
+**Would revisit when:** real users have to connect (Stage 6 or later) — then OAuth 2.1 via Entra ID, which also opens Claude Desktop; PATs if users arrive before that.
+
+## 2026-10-11 Agent evaluation runs the client in an isolated configuration
+
+**Context:** the agent eval mode runs `claude -p` per question. The first M1 run scored accuracy 40 % and 100 % false answers — implausible next to `/api/ask`'s 87 % and 0 %.
+
+**Options:** (a) trust the run; (b) read the raw answers and find what differed.
+
+**Decision:** (b). The agent runs with the user's hooks disabled (`--settings '{"disableAllHooks":true}'`) and only project-level settings (`--setting-sources project`, from an empty temporary directory), so the user's own `~/.claude/CLAUDE.md` never reaches it; a refusal counts when the answer contains the refusal sentence.
+
+**Why:** the raw answers were in Russian — the user-level CLAUDE.md overrode the `--append-system-prompt` rule "Always answer in English" — so the number scorer could not read "$416 161 млн" or "46,9 %", and the agent's refusals came with an explanation, which an exact match rejected. `--safe-mode` was tried and rejected: it also disables the MCP server. After the fix the same configuration scored 87 % (40 % → 87 %, nothing else changed). Same lesson as the Stage 4 mixed-corpus baseline: when a metric moves this far, check the environment before the system.
+
+**Would revisit when:** Claude Code changes how settings and memory are loaded, or a different agent client is evaluated — each needs its own isolation check before its numbers count.

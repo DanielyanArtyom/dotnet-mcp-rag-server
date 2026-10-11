@@ -1,3 +1,5 @@
+global using Lumen.Eval.Agents;
+global using Lumen.Eval.Comparing;
 global using Lumen.Eval.EvalSets;
 global using Lumen.Eval.Judging;
 global using Lumen.Eval.Metrics;

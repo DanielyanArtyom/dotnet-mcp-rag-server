@@ -1,3 +1,6 @@
+using Lumen.Api.Mcp;
+using ModelContextProtocol.AspNetCore;
+using ModelContextProtocol.Protocol;
 using Pgvector.EntityFrameworkCore;
 
 namespace Lumen.Api.Extensions;
@@ -29,6 +32,10 @@ public static class WebApplicationBuilderExtensions
             .Bind(builder.Configuration.GetSection(SearchOptions.SectionName))
             .ValidateOnStart();
         builder.Services.AddSingleton<IValidateOptions<SearchOptions>, SearchOptionsValidator>();
+        builder.Services.AddOptions<McpOptions>()
+            .Bind(builder.Configuration.GetSection(McpOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<McpOptions>, McpOptionsValidator>();
 
         builder.Services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(builder.Configuration.GetConnectionString("Default"), o => o.UseVector()));
@@ -85,6 +92,30 @@ public static class WebApplicationBuilderExtensions
             });
 
         builder.Services.AddAuthorization();
+
+        return builder;
+    }
+
+    public static WebApplicationBuilder AddMcp(this WebApplicationBuilder builder)
+    {
+        var options = builder.Configuration.GetSection(McpOptions.SectionName).Get<McpOptions>() ?? new McpOptions();
+
+        var mcp = builder.Services
+            .AddMcpServer(o =>
+            {
+                o.ServerInfo = new Implementation { Name = McpConstants.ServerName, Version = McpConstants.ServerVersion };
+                o.ServerInstructions = McpConstants.ServerInstructions;
+            })
+            // Tenant isolation depends on Stateless: only then does a tool run in the HTTP request's DI scope, where
+            // TenantResolutionMiddleware has set CurrentTenant. A stateful session would give tools an empty tenant.
+            .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)
+            .WithTools<FilingTools>()
+            .WithRequestFilters(f => f.AddCallToolFilter(McpToolErrorFilter.Create));
+
+        if (options.ContextTool)
+        {
+            mcp.WithTools<ChunkContextTool>();
+        }
 
         return builder;
     }

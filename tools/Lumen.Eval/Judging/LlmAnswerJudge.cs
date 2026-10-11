@@ -1,5 +1,3 @@
-using Lumen.Eval.Constants;
-
 namespace Lumen.Eval.Judging;
 
 public class LlmAnswerJudge : IAnswerJudge

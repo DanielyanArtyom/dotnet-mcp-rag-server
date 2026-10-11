@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "lumen": {
+      "type": "http",
+      "url": "http://localhost:5119/mcp",
+      "headersHelper": "/ABSOLUTE/PATH/TO/dotnet-mcp-rag-server/tools/mcp/lumen-token.sh"
+    }
+  }
+}

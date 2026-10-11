@@ -1,5 +1,3 @@
-using Lumen.Application.Interfaces;
-
 namespace Lumen.IntegrationTests.Repositories;
 
 [Collection("Postgres collection")]

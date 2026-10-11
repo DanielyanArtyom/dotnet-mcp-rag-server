@@ -37,7 +37,8 @@ static async Task<int> RunAsync(string[] args)
     {
         "retrieval" => RunMode.Retrieval,
         "full" => RunMode.Full,
-        _ => throw new ArgumentException("--mode must be 'retrieval' or 'full'.")
+        "agent" => RunMode.Agent,
+        _ => throw new ArgumentException("--mode must be 'retrieval', 'full' or 'agent'.")
     };
     var label = Option(args, "--label") ?? throw new ArgumentException("--label is required.");
     var repeat = int.TryParse(Option(args, "--repeat"), out var n) && n > 0 ? n : 1;
@@ -46,14 +47,21 @@ static async Task<int> RunAsync(string[] args)
     var (set, sha) = EvalSetLoader.Load(evalSetPath);
 
     IAnswerJudge? judge = null;
-    if (mode == RunMode.Full && !string.IsNullOrWhiteSpace(settings.Judge.Endpoint))
+    if (mode.IsAnswering() && !string.IsNullOrWhiteSpace(settings.Judge.Endpoint))
     {
         var client = new OpenAIClient(new ApiKeyCredential(settings.Judge.ApiKey), new OpenAIClientOptions { Endpoint = new Uri(settings.Judge.Endpoint) });
         judge = new LlmAnswerJudge(client.GetChatClient(settings.Judge.Deployment).AsIChatClient());
     }
 
     using var http = new HttpClient { BaseAddress = new Uri(settings.ApiBaseUrl), Timeout = TimeSpan.FromMinutes(5) };
-    var runner = new EvalRunner(new LumenApiClient(http), settings.Tenants, judge, settings.Judge.Deployment);
+    IAgentClient? agent = null;
+    if (mode == RunMode.Agent)
+    {
+        var mcpUrl = settings.Agent.McpUrl ?? new Uri(new Uri(settings.ApiBaseUrl), "mcp").ToString();
+        agent = new ClaudeCliAgentClient(settings.Agent, mcpUrl);
+    }
+
+    var runner = new EvalRunner(new LumenApiClient(http), settings.Tenants, judge, settings.Judge.Deployment, agent);
     RunOutcome outcome;
     try
     {
@@ -69,7 +77,8 @@ static async Task<int> RunAsync(string[] args)
     }
 
     var deployment = outcome.Header.ServerSettings.GetProperty("chat").GetProperty("deployment").GetString() ?? string.Empty;
-    var summary = RunSummaryBuilder.Build(outcome.Results, mode, settings.Prices.GetValueOrDefault(deployment));
+    var price = mode == RunMode.Agent ? null : settings.Prices.GetValueOrDefault(deployment);
+    var summary = RunSummaryBuilder.Build(outcome.Results, mode, price);
     var directory = RunStore.Write(settings.RunsPath, outcome, summary);
 
     ConsoleReport.PrintRun(Console.Out, outcome.Header, outcome.Results, summary, directory);
@@ -93,7 +102,7 @@ static string? Option(string[] args, string name)
 static int Usage()
 {
     Console.WriteLine("Usage (from tools/Lumen.Eval):");
-    Console.WriteLine("  dotnet run -- run --mode retrieval|full --label <name> [--repeat N] [--holdout] [--eval-set <path>]");
+    Console.WriteLine("  dotnet run -- run --mode retrieval|full|agent --label <name> [--repeat N] [--holdout] [--eval-set <path>]");
     Console.WriteLine("  dotnet run -- compare <runDirA> <runDirB>");
     return 1;
 }

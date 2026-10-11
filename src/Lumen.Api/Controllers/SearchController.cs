@@ -1,5 +1,3 @@
-using Lumen.Application.Search;
-
 namespace Lumen.Api.Controllers;
 
 [ApiController]

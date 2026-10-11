@@ -64,4 +64,47 @@ public class ConsoleReportTests
 
     private static string RowsOnly(string output) =>
         string.Join('\n', output.Split('\n').Where(l => l.StartsWith("q1")));
+
+    [Fact]
+    public void Agent_runs_print_no_ranking_metrics_and_a_relevant_seen_column()
+    {
+        var result = Result(ExpectedKind.Number, true);
+        result.RetrievedRelevant = true;
+
+        var output = Print(Header(RunMode.Agent, """{"chat":{"deployment":"d"}}"""), result);
+
+        Assert.DoesNotContain("hit@", output);
+        Assert.DoesNotContain("MRR", output);
+        Assert.Contains("relevant chunk seen 100%", output);
+        var categoryHeader = output.Split('\n').Single(l => l.StartsWith("category"));
+        Assert.Contains("seen", categoryHeader);
+        Assert.Contains(output.Split('\n'), l => l.StartsWith("c ") && l.Contains("100%"));
+    }
+
+    [Fact]
+    public void Agent_runs_print_both_the_reported_and_the_configured_model()
+    {
+        var header = Header(RunMode.Agent, """{"chat":{"deployment":"d"}}""");
+        header.AgentModel = "claude-sonnet-5-5";
+        header.AgentConfiguredModel = "sonnet";
+
+        var output = Print(header, Result(ExpectedKind.Number, true));
+
+        Assert.Contains("agent: model claude-sonnet-5-5 (configured sonnet)", output);
+    }
+
+    [Theory]
+    [InlineData(RunMode.Retrieval, RunMode.Full, "retrieval depth differs")]
+    [InlineData(RunMode.Full, RunMode.Agent, "only answer accuracy is compared")]
+    [InlineData(RunMode.Retrieval, RunMode.Agent, "nothing is compared")]
+    public void The_mode_mismatch_warning_matches_what_is_actually_compared(RunMode a, RunMode b, string expected)
+    {
+        var report = RunComparer.Compare(Header(a, "{}"), [Result(ExpectedKind.Number, true)], Header(b, "{}"), [Result(ExpectedKind.Number, true)]);
+        var writer = new StringWriter();
+
+        ConsoleReport.PrintComparison(writer, "A", "B", report);
+
+        var warning = writer.ToString().Split('\n').Single(l => l.Contains("different modes"));
+        Assert.Contains(expected, warning);
+    }
 }

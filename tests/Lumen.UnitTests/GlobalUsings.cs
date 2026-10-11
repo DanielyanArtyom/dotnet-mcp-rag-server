@@ -1,4 +1,8 @@
+global using Lumen.Api.Constants;
+global using Lumen.Api.DependencyInjection;
 global using Lumen.Api.Mapping;
+global using Lumen.Api.Mcp;
+global using Lumen.Application.Search;
 global using Lumen.Application.Ask;
 global using Lumen.Application.Constants;
 global using Lumen.Domain.Entities;
@@ -32,3 +36,4 @@ global using System.Text;
 
 global using AutoMapper;
 global using Moq;
+global using MediatR;

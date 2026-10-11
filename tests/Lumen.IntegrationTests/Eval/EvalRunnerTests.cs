@@ -1,8 +1,3 @@
-using Lumen.Eval.Api;
-using Lumen.Eval.EvalSets;
-using Lumen.Eval.Judging;
-using Lumen.Eval.Running;
-
 namespace Lumen.IntegrationTests.Eval;
 
 [Collection("Postgres collection")]

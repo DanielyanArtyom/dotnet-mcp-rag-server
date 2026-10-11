@@ -1,5 +1,3 @@
-using Lumen.Application.Interfaces;
-
 namespace Lumen.Api.Controllers;
 
 [ApiController]
@@ -11,6 +9,7 @@ public class SettingsController : ControllerBase
     private readonly EmbeddingOptions _embeddingOptions;
     private readonly ChunkingOptions _chunking;
     private readonly SearchOptions _search;
+    private readonly McpOptions _mcp;
     private readonly IEmbeddingService _embeddings;
     private readonly IIngestProfileProvider _ingestProfile;
 
@@ -19,6 +18,7 @@ public class SettingsController : ControllerBase
         IOptions<EmbeddingOptions> embeddingOptions,
         IOptions<ChunkingOptions> chunking,
         IOptions<SearchOptions> search,
+        IOptions<McpOptions> mcp,
         IEmbeddingService embeddings,
         IIngestProfileProvider ingestProfile)
     {
@@ -26,6 +26,7 @@ public class SettingsController : ControllerBase
         _embeddingOptions = embeddingOptions.Value;
         _chunking = chunking.Value;
         _search = search.Value;
+        _mcp = mcp.Value;
         _embeddings = embeddings;
         _ingestProfile = ingestProfile;
     }
@@ -67,7 +68,8 @@ public class SettingsController : ControllerBase
                 MaxChunksPerDocument = _search.MaxChunksPerDocument
             },
             IngestProfile = _ingestProfile.Current,
-            PromptHash = RagPrompt.Hash
+            PromptHash = RagPrompt.Hash,
+            Mcp = new McpSettingsDto { ContextTool = _mcp.ContextTool }
         });
     }
 }

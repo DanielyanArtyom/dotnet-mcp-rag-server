@@ -1,6 +1,6 @@
 # Lumen — Multi-tenant RAG & MCP server on .NET
 
-An ASP.NET Core service that ingests documents, indexes them for vector search in PostgreSQL (pgvector), answers questions with cited sources, and (next stage) exposes retrieval as an MCP server. Multi-tenant end to end: each tenant's data is isolated down to the raw SQL layer, not just the ORM.
+An ASP.NET Core service that ingests documents, indexes them for vector search in PostgreSQL (pgvector), answers questions with cited sources, and exposes retrieval as an MCP server that Claude Code can use. Multi-tenant end to end: each tenant's data is isolated down to the raw SQL layer, not just the ORM.
 
 The corpus is SEC EDGAR filings (10-K / 10-Q), one company per tenant. It is messy, table-heavy HTML, picked on purpose as a stress test for parsing and chunking. Every retrieval change was measured with a custom eval harness before it was kept or dropped.
 
@@ -21,10 +21,12 @@ Holdout set (6 questions, run once on the final configuration): 4/6, 0 false ans
 
 ## What's interesting here
 
-- **Tenant isolation proven on raw SQL, with a negative control.** The vector query is the one query EF Core's global filter can't reach. A test seeds identical chunk text into two tenants and shows one tenant's search never returns the other's rows. A paired control runs the same SQL without the tenant predicate and shows it *does* leak, so the isolation comes from the predicate, not the table. 11 isolation tests at 5 levels: EF Core, HTTP, vector SQL, hybrid SQL and `/api/ask`.
+- **Tenant isolation proven on raw SQL, with a negative control.** The vector query is the one query EF Core's global filter can't reach. A test seeds identical chunk text into two tenants and shows one tenant's search never returns the other's rows. A paired control runs the same SQL without the tenant predicate and shows it *does* leak, so the isolation comes from the predicate, not the table. 16 isolation tests at 6 levels: EF Core, HTTP, vector SQL, hybrid SQL, `/api/ask` and MCP.
 - **The metrics lied, and the harness caught it.** The first baseline was computed on a corpus chunked under two different configs, and the settings endpoint truthfully reported only the current one. Anchor-based labels flagged the mismatch. The fix: every document now stores the chunking profile it was ingested with, and the harness refuses to run on a mismatched corpus.
 - **Hybrid search rejected on evidence.** Postgres full-text search + vector, fused with RRF in a single tenant-scoped SQL statement: accuracy 70 % → 70 %, 3 questions gained, 3 lost (p = 1.0). The built-in `ts_rank_cd` has no IDF, so prose full of common words outranked the table holding the actual number.
 - **A one-regex fix beat every "smart" change.** `$10.7 billion` was being stored as `$10. 7 billion` in 4 % of chunks. The cause was the sentence splitter inside the chunker, not the HTML reader. Protecting decimals during splitting was the only step with a statistically significant retrieval gain.
+- **Stateless MCP is an isolation requirement, not a scaling choice.** Only in stateless mode does an MCP tool run in the HTTP request's DI scope, where the tenant was resolved from the JWT. Switched to stateful, the tool saw an empty tenant: the isolation test's positive control ("tenant B finds its own document") failed, while a negative-only test still passed. Every MCP isolation test now checks both directions.
+- **An agent with plain search matches the RAG pipeline.** Answering the eval set through Claude Code + the MCP `search_filings` tool scored 87 %, the same as `/api/ask` (3 gained, 3 lost), at ~9× the cost and ~8× the latency. So MCP exposes search only. The first agent run said 40 % — the client's own user settings had switched it to Russian, which the number scorer couldn't read.
 - **The biggest win was the simplest knob.** Retrieval found the right chunk in the top 10 far more often than in the top 5, so passing 10 sources to the model instead of 5 lifted accuracy 70 % → 83 %, 4 questions gained and 0 lost.
 
 The full reasoning, alternatives and numbers behind each choice are in [`DECISIONS.md`](DECISIONS.md).
@@ -35,7 +37,7 @@ Onion Architecture: four layers, two test projects, plus the eval harness as a s
 
 ```mermaid
 graph TD
-    Api["Lumen.Api<br/>Controllers, DTOs, JWT, Swagger"] --> Infra["Lumen.Infrastructure<br/>EF Core + pgvector, raw-SQL search,<br/>HTML/PDF readers, chunker, embeddings, chat, file storage"]
+    Api["Lumen.Api<br/>Controllers, DTOs, JWT, Swagger,<br/>MCP server (/mcp)"] --> Infra["Lumen.Infrastructure<br/>EF Core + pgvector, raw-SQL search,<br/>HTML/PDF readers, chunker, embeddings, chat, file storage"]
     Infra --> App["Lumen.Application<br/>MediatR CQRS, RAG pipeline,<br/>interfaces (IEmbeddingService, IChatService, IChunker, …)"]
     App --> Domain["Lumen.Domain<br/>Tenant / User / Document / DocumentChunk"]
 
@@ -43,6 +45,8 @@ graph TD
     IntegrationTests["Lumen.IntegrationTests"] -.exercises.-> Api
     Eval["tools/Lumen.Eval<br/>eval harness (console)"] -.HTTP.-> Api
     EvalTests["Lumen.Eval.Tests"] -.exercises.-> Eval
+    Client["Claude Code / MCP Inspector"] -.MCP over HTTP, JWT.-> Api
+    Eval -. "agent mode: claude -p" .-> Client
 ```
 
 `Lumen.Domain` has zero external dependencies. `Lumen.Api` is the only layer that knows about ASP.NET Core/HTTP. AI providers, parsers and pgvector stay behind Application-layer interfaces in `Lumen.Infrastructure`.
@@ -183,6 +187,16 @@ Each change was measured on its own, one step at a time:
 | E5 | Temperature 0 / 0.2 / 0.6, 3 repeats each | 87 % each | — | — | No effect: 0 % verdict flips |
 | **Final** | Vector + headers + decimals, 10 sources | **87 %** | **92 %** | **0.633** | |
 
+A third mode, `agent`, answers each question through `claude -p` with Lumen's MCP tools (built-in tools off, the user's own Claude Code settings and hooks off) and scores the answer the same way:
+
+| Run | Answering path | Accuracy | False answers | Cost / run | Latency p50 |
+|---|---|---|---|---|---|
+| Final (above) | `/api/ask`, gpt-4o, 10 sources | 87 % | 0 % | ~$0.15 | 0.95 s |
+| M1 | Claude Code + `search_filings` / `list_filings` | 87 % (3:3, p = 1.0) | 33 % ("not disclosed, but…") | $1.37 | 8.1 s |
+| M2 | M1 + `get_chunk_context` | 87 % (0:0 vs M1) | 33 % | $1.44 | 7.7 s |
+
+In M2 the agent never called the neighbour-chunk tool, so it stays off.
+
 Retrieval columns come from `retrieval` runs (top 10). Accuracy comes from `full` runs with 5 sources, except E4, E5 and Final with 10. Known remaining gaps: split tables don't repeat their header row, 10-K vs 10-Q comparisons need two chunks from two filings, and 30 questions is too few for significance.
 
 ## API
@@ -198,6 +212,7 @@ Retrieval columns come from `retrieval` runs (top 10). Accuracy comes from `full
 | `POST` | `/api/search` | Admin, Member | Top-k chunks of the caller's tenant: `{ query, topK ≤ 50, documentId? }` |
 | `POST` | `/api/ask` | Admin, Member | Answer a question from the tenant's documents, with `[n]` citations |
 | `GET` | `/api/settings` | Admin | Effective non-secret config: models, chunking, search mode, ingest profile, prompt hash |
+| `POST` | `/mcp` | Admin, Member | MCP server (Streamable HTTP, stateless): `search_filings`, `list_filings`; see [Connect from Claude Code](#connect-from-claude-code-mcp) |
 
 Another tenant's document returns 404, not 403: the global filter makes the row invisible, and a 403 would reveal that the id exists elsewhere.
 
@@ -216,8 +231,10 @@ Defaults in `src/Lumen.Api/appsettings.json` are the measured final configuratio
 | `Chat:ContextTopK` | 10 | sources passed to the model |
 | `Chat:Temperature` | 0.2 | also `TopP`, `ReasoningEffort`, `MaxOutputTokens` |
 | `Embeddings:Provider` / `Chat:Provider` | `Fake` | or `AzureOpenAI` |
+| `Mcp:ContextTool` | `false` | exposes `get_chunk_context` (neighbouring chunks) |
+| `Mcp:AllowedOrigins` | `[]` | allowed `Origin` values on `/mcp`; Development adds the MCP Inspector |
 
-Changing any `Chunking` setting changes the ingest profile, so delete and re-upload the documents. `Search` and `Chat` settings need only a restart.
+Changing any `Chunking` setting changes the ingest profile, so delete and re-upload the documents. `Search`, `Chat` and `Mcp` settings need only a restart.
 
 ## Implementation notes
 
@@ -227,7 +244,8 @@ Changing any `Chunking` setting changes the ingest profile, so delete and re-upl
 - **Search:** exact (non-ANN) cosine search. About 300 ms over ~5,000 chunks, so no HNSW index yet.
 - **Errors:** global exception handling via `IExceptionHandler` maps domain exceptions to `ProblemDetails`. An AI-provider failure returns 503.
 - **Seed data:** in Development only, two tenants (Acme, Globex), each with an admin user and a sample document.
-- **Tests:** 339 passing (193 unit, 77 eval harness, 69 integration against a real Postgres container), including a characterization test on a real Apple 10-K.
+- **MCP:** `ModelContextProtocol.AspNetCore` 2.2.0, stateless Streamable HTTP at `/mcp` behind the same JWT bearer scheme; tools call the Application layer through MediatR and return Markdown; an `Origin` check guards `/mcp`; a call-tool filter turns domain exceptions into actionable tool errors without leaking details.
+- **Tests:** 426 passing (230 unit, 106 eval harness, 90 integration against a real Postgres container), including a characterization test on a real Apple 10-K.
 
 ## Tech stack
 
@@ -281,6 +299,51 @@ dotnet run -- run --mode retrieval --label my-run      # or --mode full, add --r
 dotnet run -- compare runs/<runA> runs/<runB>
 ```
 
+### Connect from Claude Code (MCP)
+
+Lumen exposes its tenant-scoped search as an MCP server at `http://localhost:5119/mcp`. It uses the same JWT as the REST API: the token's `tenant_id` decides which company's filings the tools can see, so logging in as `admin@acme.test` gives Apple's filings and `admin@globex.test` gives JPMorgan's. There is no OAuth server: the client sends `Authorization: Bearer <JWT>` itself. Tokens live 60 minutes.
+
+**Quick start: a static token** (good for a short session):
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:5119/api/auth/token -H 'Content-Type: application/json' \
+  -d '{"email":"admin@acme.test","password":"Passw0rd!"}' | jq -r .token)
+claude mcp add --transport http lumen http://localhost:5119/mcp --header "Authorization: Bearer $TOKEN"
+```
+
+**Recommended: a token helper** that logs in on every connection and again whenever the token expires. Claude Code runs the command in `headersHelper` and uses the header it prints (`tools/mcp/lumen-token.sh` needs `curl` and `jq`):
+
+```bash
+# run from the repository root
+claude mcp add-json lumen --scope local "{
+  \"type\": \"http\",
+  \"url\": \"http://localhost:5119/mcp\",
+  \"headersHelper\": \"LUMEN_EMAIL=admin@acme.test LUMEN_PASSWORD='Passw0rd!' $PWD/tools/mcp/lumen-token.sh\"
+}"
+```
+
+Then start `claude` in the repository folder and accept the workspace trust prompt. Claude Code only runs a `headersHelper` in a trusted folder. Run `/mcp`: `lumen` should be connected with two tools. `tools/mcp/mcp.example.json` shows the same configuration as a `.mcp.json` file, with the credentials taken from `LUMEN_EMAIL` / `LUMEN_PASSWORD` in the environment. To switch companies, register a second server (for example `lumen-globex`) with `admin@globex.test`.
+
+Try asking (as Acme):
+
+- *How many shareholders of record did Apple have as of October 17, 2025?* (22,429)
+- *What were Apple's Wearables, Home and Accessories net sales in fiscal 2025, and why did they change?* ($35,686 million, down 4 %, lower Accessories and Wearables sales)
+- *How much did Apple's Mac net sales grow in the third quarter of fiscal 2026?* ($10,352 million vs $8,046 million, up 29 %)
+- *What revenue guidance did Apple give for fiscal 2027?* (not in the filings; the model should say so)
+
+| Tool | Arguments | Returns |
+|---|---|---|
+| `search_filings` | `query`, `topK` (1–20, default 10), `documentId` (optional) | Matching passages as Markdown: filing and section heading, `documentId`, `chunkId`, text |
+| `list_filings` | — | The tenant's filings with filing dates and `documentId`s |
+
+Troubleshooting:
+
+- **`Failed to connect` / "Dynamic Client Registration rejected (404)":** the client got a 401 and fell back to OAuth discovery, which Lumen deliberately doesn't implement. Usually the header never reached the server: the helper didn't run (workspace not trusted), the token expired (static header), or `Bearer ` is missing.
+- **403:** the request carried an `Origin` header that is not in `Mcp:AllowedOrigins`.
+- **MCP Inspector** works the same way: `npx @modelcontextprotocol/inspector`, transport Streamable HTTP, URL `http://localhost:5119/mcp`, header `Authorization: Bearer <JWT>`. A CLI check: `npx @modelcontextprotocol/inspector --cli http://localhost:5119/mcp --transport http --header "Authorization: Bearer $TOKEN" --method tools/list`.
+
+Claude Desktop and claude.ai are not supported: their custom connectors need OAuth 2.1, which is a deliberate non-goal for now (see `DECISIONS.md`).
+
 **Test:**
 
 ```bash
@@ -301,6 +364,6 @@ DOCKER_API_VERSION=1.43 dotnet test
 2. ✅ Ingest & chunking: HTML/PDF parsing, table-aware chunking
 3. ✅ Embeddings + storage: Azure OpenAI + pgvector, exact tenant-scoped vector search
 4. ✅ RAG endpoint: retrieval, generation with citations, eval-driven tuning
-5. MCP server: search and documents exposed as MCP tools over HTTP, verified with MCP Inspector and Claude Code
+5. ✅ MCP server: tenant-scoped search as MCP tools over HTTP, verified with MCP Inspector and Claude Code, measured against the RAG endpoint
 6. Deploy: Azure App Service, managed identity, health checks
 7. Polish: demo GIF, screenshots, one-command `docker compose up`

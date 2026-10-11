@@ -3,7 +3,13 @@ namespace Lumen.Eval.Running;
 public enum RunMode
 {
     Retrieval,
-    Full
+    Full,
+    Agent
+}
+
+public static class RunModeExtensions
+{
+    public static bool IsAnswering(this RunMode mode) => mode is RunMode.Full or RunMode.Agent;
 }
 
 public class RunOptions
@@ -46,6 +52,11 @@ public class QuestionResult
     public long LatencyMs { get; set; }
     public long? ServerTotalMs { get; set; }
     public List<SourceRecord> Sources { get; set; } = [];
+    public bool? RetrievedRelevant { get; set; }
+    public List<string> ToolCalls { get; set; } = [];
+    public List<Guid> SeenChunkIds { get; set; } = [];
+    public int? Turns { get; set; }
+    public decimal? AgentCostUsd { get; set; }
 }
 
 public class RunHeader
@@ -67,6 +78,10 @@ public class RunHeader
     public int JudgeInputTokens { get; set; }
     public int JudgeOutputTokens { get; set; }
     public string? AbortReason { get; set; }
+    public string? AgentModel { get; set; }
+    public string? AgentConfiguredModel { get; set; }
+    public string? AgentCliVersion { get; set; }
+    public string? AgentRulesHash { get; set; }
 
     public int? ContextTopK() =>
         ServerSettings.ValueKind == JsonValueKind.Object
