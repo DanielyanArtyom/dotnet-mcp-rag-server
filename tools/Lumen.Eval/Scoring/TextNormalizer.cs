@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Lumen.Eval.Scoring;
 
 public static class TextNormalizer

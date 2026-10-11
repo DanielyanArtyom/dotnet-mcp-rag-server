@@ -8,7 +8,8 @@ builder
     .AddWebApi()
     .AddMapper()
     .AddSwagger()
-    .AddAuthentication();
+    .AddAuthentication()
+    .AddMcp();
 
 var app = builder.Build();
 
@@ -27,6 +28,7 @@ app.UseMiddlewares();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapMcp(McpConstants.EndpointPath).RequireAuthorization();
 
 app.Run();
 

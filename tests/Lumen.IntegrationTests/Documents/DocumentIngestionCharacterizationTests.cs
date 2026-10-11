@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Xunit.Abstractions;
 
 namespace Lumen.IntegrationTests.Documents;

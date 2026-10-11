@@ -9,6 +9,11 @@ public static class ConsoleReport
         output.WriteLine($"started: {header.StartedAt:yyyy-MM-dd HH:mm:ss}   git: {header.GitCommit}");
         output.WriteLine($"eval set: {header.EvalSetPath}   sha256: {header.EvalSetSha256[..12]}");
         output.WriteLine($"judge deployment: {header.JudgeDeployment ?? "none"}");
+        var agent = header.Mode == RunMode.Agent;
+        if (agent)
+        {
+            output.WriteLine($"agent: model {header.AgentModel ?? "-"} (configured {header.AgentConfiguredModel ?? "-"})  cli {header.AgentCliVersion ?? "-"}  rules {header.AgentRulesHash ?? "-"}");
+        }
         if (header.AbortReason is not null)
         {
             output.WriteLine($"ABORTED (partial run): {header.AbortReason}");
@@ -33,7 +38,10 @@ public static class ConsoleReport
             var refused = r.Refused switch { true => "y", false => "n", null => "-" };
             var note = r.Truncated == true ? "TRUNCATED " : string.Empty;
             note += r.Labelable || r.ExpectedKind == ExpectedKind.Refusal ? r.JudgeReason ?? string.Empty : "unlabelable";
-            output.WriteLine($"{r.Id,-10} {r.Repeat,3} {r.Category,-16} {r.Tenant,-7} {r.FirstHitRank?.ToString() ?? "-",4} {ok,3} {refused,3} {$"{r.InputTokens}/{r.OutputTokens}",11} {r.LatencyMs,6}  {Truncate(note, 60)}");
+            var rank = agent
+                ? r.RetrievedRelevant switch { true => "y", false => "n", null => "-" }
+                : r.FirstHitRank?.ToString() ?? "-";
+            output.WriteLine($"{r.Id,-10} {r.Repeat,3} {r.Category,-16} {r.Tenant,-7} {rank,4} {ok,3} {refused,3} {$"{r.InputTokens}/{r.OutputTokens}",11} {r.LatencyMs,6}  {Truncate(note, 60)}");
         }
 
         output.WriteLine();
@@ -43,11 +51,19 @@ public static class ConsoleReport
         {
             if (contextTopK is not { } cap || k <= cap)
             {
-                hits.Add($"hit@{k} {value:P0}");
+                hits.Add($"hit@{k} {Pct(value)}");
             }
         }
 
-        output.WriteLine($"retrieval ({summary.RetrievalQuestions} labelable): {string.Join("  ", hits)}  MRR {summary.Mrr:F3}  mean retrieved tokens {summary.MeanRetrievedTokens:F0}");
+        if (agent)
+        {
+            output.WriteLine($"retrieval ({summary.RetrievalQuestions} labelable): relevant chunk seen {Pct(summary.RetrievedRelevantRate)}  mean tool calls {summary.MeanToolCalls?.ToString("F1") ?? "-"}");
+        }
+        else
+        {
+            output.WriteLine($"retrieval ({summary.RetrievalQuestions} labelable): {string.Join("  ", hits)}  MRR {summary.Mrr?.ToString("F3") ?? "-"}  mean retrieved tokens {summary.MeanRetrievedTokens:F0}");
+        }
+
         if (contextTopK is { } depth)
         {
             output.WriteLine($"  (full run: ranks come from /api/ask sources, capped at server contextTopK={depth})");
@@ -57,7 +73,10 @@ public static class ConsoleReport
         {
             output.WriteLine($"answers: accuracy {summary.Accuracy:P0}  false answers {summary.FalseAnswerRate:P0}  false refusals {summary.FalseRefusalRate:P0}  truncated {summary.TruncatedCount}");
             output.WriteLine($"retrieval × answer: hit✓ {summary.Grid.HitCorrect}  hit✗ {summary.Grid.HitWrong}  miss✓ {summary.Grid.MissCorrect}  miss✗ {summary.Grid.MissWrong}");
-            output.WriteLine($"tokens: in {summary.InputTokens}  out {summary.OutputTokens} (reasoning {summary.ReasoningTokens})  cost {(summary.CostUsd is { } cost ? $"${cost:F4}" : "n/a (no price configured)")}  judge tokens {header.JudgeInputTokens}/{header.JudgeOutputTokens}");
+            var costText = summary.CostUsd is { } cost
+                ? $"${cost:F4}{(agent ? " (CLI-reported total)" : string.Empty)}"
+                : agent ? "n/a (the CLI reported no cost)" : "n/a (no price configured)";
+            output.WriteLine($"tokens: in {summary.InputTokens}  out {summary.OutputTokens} (reasoning {summary.ReasoningTokens})  cost {costText}  judge tokens {header.JudgeInputTokens}/{header.JudgeOutputTokens}");
         }
 
         if (summary.RepeatFlipRate is { } flip)
@@ -67,10 +86,21 @@ public static class ConsoleReport
 
         output.WriteLine($"latency: p50 {summary.LatencyP50:F0} ms  p95 {summary.LatencyP95:F0} ms");
         output.WriteLine();
-        output.WriteLine($"{"category",-16} {"n",3} {"hit@5",6} {"MRR",6} {"acc",6}");
-        foreach (var c in summary.ByCategory)
+        if (agent)
         {
-            output.WriteLine($"{c.Category,-16} {c.Count,3} {Pct(c.HitAt5),6} {c.Mrr?.ToString("F3") ?? "-",6} {Pct(c.Accuracy),6}");
+            output.WriteLine($"{"category",-16} {"n",3} {"seen",6} {"acc",6}");
+            foreach (var c in summary.ByCategory)
+            {
+                output.WriteLine($"{c.Category,-16} {c.Count,3} {Pct(c.RetrievedRelevantRate),6} {Pct(c.Accuracy),6}");
+            }
+        }
+        else
+        {
+            output.WriteLine($"{"category",-16} {"n",3} {"hit@5",6} {"MRR",6} {"acc",6}");
+            foreach (var c in summary.ByCategory)
+            {
+                output.WriteLine($"{c.Category,-16} {c.Count,3} {Pct(c.HitAt5),6} {c.Mrr?.ToString("F3") ?? "-",6} {Pct(c.Accuracy),6}");
+            }
         }
 
         output.WriteLine();
@@ -92,7 +122,11 @@ public static class ConsoleReport
 
         if (report.ModeMismatch)
         {
-            output.WriteLine("WARNING: one run is retrieval and the other full — retrieval depth differs (topK 10 vs the server's contextTopK), so hit@k and MRR are not like-for-like.");
+            output.WriteLine(report.RetrievalComparable
+                ? "WARNING: the two runs use different modes — retrieval depth differs (retrieval topK 10, full the server's contextTopK), so retrieval metrics are not like-for-like."
+                : report.AccuracyPValue is not null
+                    ? "WARNING: the two runs use different modes — an agent run has no retrieval ranks, so only answer accuracy is compared."
+                    : "WARNING: the two runs use different modes — an agent run has no retrieval ranks and a retrieval run has no answers, so nothing is compared.");
         }
 
         if (report.ContextTopKMismatch)
@@ -101,8 +135,15 @@ public static class ConsoleReport
         }
 
         output.WriteLine($"questions compared: {report.QuestionsCompared}");
-        output.WriteLine($"hit@5 flips: A-only {Join(report.Hit5AOnly)} | B-only {Join(report.Hit5BOnly)}   McNemar p={report.Hit5PValue:F4}");
-        output.WriteLine($"MRR: A {report.MrrA:F3}  B {report.MrrB:F3}   paired randomization p={report.MrrPValue:F4}");
+        if (report.RetrievalComparable)
+        {
+            output.WriteLine($"hit@5 flips: A-only {Join(report.Hit5AOnly)} | B-only {Join(report.Hit5BOnly)}   McNemar p={report.Hit5PValue:F4}");
+            output.WriteLine($"MRR: A {report.MrrA:F3}  B {report.MrrB:F3}   paired randomization p={report.MrrPValue:F4}");
+        }
+        else
+        {
+            output.WriteLine("retrieval: not compared (an agent run has no ranks)");
+        }
         if (report.AccuracyPValue is { } p)
         {
             output.WriteLine($"accuracy flips: A-only {Join(report.AccuracyAOnly)} | B-only {Join(report.AccuracyBOnly)}   McNemar p={p:F4}");

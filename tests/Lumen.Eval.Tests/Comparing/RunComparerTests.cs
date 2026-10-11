@@ -1,5 +1,3 @@
-using Lumen.Eval.Comparing;
-
 namespace Lumen.Eval.Tests.Comparing;
 
 public class RunComparerTests
@@ -100,5 +98,30 @@ public class RunComparerTests
         Assert.False(same.ContextTopKMismatch);
         Assert.False(missing.ContextTopKMismatch);
         Assert.False(missing.ModeMismatch);
+    }
+
+    [Fact]
+    public void Agent_versus_full_compares_accuracy_but_not_retrieval_ranks()
+    {
+        List<QuestionResult> a = [R("q", 1, false)];
+        List<QuestionResult> b = [R("q", null, true)];
+
+        var report = RunComparer.Compare(Header(RunMode.Full, "x"), a, Header(RunMode.Agent, "x"), b);
+
+        Assert.False(report.RetrievalComparable);
+        Assert.Empty(report.Hit5AOnly);
+        Assert.Equal(["q"], report.AccuracyBOnly);
+        Assert.NotNull(report.AccuracyPValue);
+    }
+
+    [Fact]
+    public void Agent_versus_retrieval_compares_nothing()
+    {
+        var report = RunComparer.Compare(Header(RunMode.Retrieval), [R("q", 1, null)], Header(RunMode.Agent), [R("q", null, true)]);
+
+        Assert.True(report.ModeMismatch);
+        Assert.False(report.RetrievalComparable);
+        Assert.Null(report.AccuracyPValue);
+        Assert.Equal(0, report.QuestionsCompared);
     }
 }

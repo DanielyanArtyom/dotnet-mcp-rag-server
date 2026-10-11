@@ -9,6 +9,11 @@ global using Lumen.Infrastructure.Tenancy;
 global using Lumen.IntegrationTests.Utils;
 global using Lumen.Infrastructure.DependencyInjection;
 global using Lumen.Infrastructure.Constants;
+global using Lumen.Application.Interfaces;
+global using Lumen.Eval.Api;
+global using Lumen.Eval.EvalSets;
+global using Lumen.Eval.Judging;
+global using Lumen.Eval.Running;
 
 global using Microsoft.AspNetCore.Identity;
 global using Microsoft.AspNetCore.Mvc.Testing;
@@ -23,6 +28,7 @@ global using System.Net.Http.Json;
 global using System.Diagnostics;
 global using System.Text;
 global using System.Text.Json;
+global using System.Text.RegularExpressions;
 
 global using AutoMapper;
 global using Pgvector;

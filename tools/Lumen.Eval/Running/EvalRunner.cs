@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Lumen.Eval.Running;
 
 public class EvalRunner
@@ -11,20 +9,27 @@ public class EvalRunner
     private readonly IReadOnlyDictionary<string, TenantCredentials> _tenants;
     private readonly IAnswerJudge? _judge;
     private readonly string? _judgeDeployment;
+    private readonly IAgentClient? _agent;
 
-    public EvalRunner(LumenApiClient api, IReadOnlyDictionary<string, TenantCredentials> tenants, IAnswerJudge? judge, string? judgeDeployment = null)
+    public EvalRunner(LumenApiClient api, IReadOnlyDictionary<string, TenantCredentials> tenants, IAnswerJudge? judge, string? judgeDeployment = null, IAgentClient? agent = null)
     {
         _api = api;
         _tenants = tenants;
         _judge = judge;
         _judgeDeployment = judge is null ? null : judgeDeployment;
+        _agent = agent;
     }
 
     public async Task<RunOutcome> RunAsync(EvalSet set, string evalSetPath, string evalSetSha256, RunOptions options, CancellationToken ct)
     {
-        if (options.Mode == RunMode.Full && _judge is null && set.Questions.Any(q => q.Expected.Kind == ExpectedKind.Text))
+        if (options.Mode.IsAnswering() && _judge is null && set.Questions.Any(q => q.Expected.Kind == ExpectedKind.Text))
         {
-            throw new InvalidOperationException("A full run needs the Judge settings (Endpoint, Deployment, ApiKey) for text answers.");
+            throw new InvalidOperationException($"A {options.Mode.ToString().ToLowerInvariant()} run needs the Judge settings (Endpoint, Deployment, ApiKey) for text answers.");
+        }
+
+        if (options.Mode == RunMode.Agent && _agent is null)
+        {
+            throw new InvalidOperationException("An agent run needs an agent client.");
         }
 
         var tokens = new Dictionary<string, string>();
@@ -51,6 +56,13 @@ public class EvalRunner
             ServerSettings = await _api.GetSettingsAsync(tokens.Values.First(), ct),
             JudgeDeployment = _judgeDeployment
         };
+
+        if (options.Mode == RunMode.Agent)
+        {
+            header.AgentCliVersion = await _agent!.GetVersionAsync(ct);
+            header.AgentConfiguredModel = _agent.ConfiguredModel;
+            header.AgentRulesHash = AgentPromptConstants.RulesHash;
+        }
 
         header.IngestProfile = header.ServerSettings.TryGetProperty("ingestProfile", out var profile) ? profile.GetString() : null;
 
@@ -105,7 +117,7 @@ public class EvalRunner
 
         var questions = set.Questions
             .Where(q => q.Holdout == options.Holdout)
-            .Where(q => options.Mode == RunMode.Full || q.Expected.Kind != ExpectedKind.Refusal)
+            .Where(q => options.Mode.IsAnswering() || q.Expected.Kind != ExpectedKind.Refusal)
             .ToList();
 
         var outcome = new RunOutcome { Header = header };
@@ -125,13 +137,17 @@ public class EvalRunner
                         Labelable = labelable.Contains(question.Id)
                     };
 
-                    if (options.Mode == RunMode.Retrieval)
+                    switch (options.Mode)
                     {
-                        await RunRetrievalAsync(question, result, tokens[question.Tenant], ownDocuments[question.Tenant], ct);
-                    }
-                    else
-                    {
-                        await RunFullAsync(question, result, tokens[question.Tenant], ownDocuments[question.Tenant], header, ct);
+                        case RunMode.Retrieval:
+                            await RunRetrievalAsync(question, result, tokens[question.Tenant], ownDocuments[question.Tenant], ct);
+                            break;
+                        case RunMode.Full:
+                            await RunFullAsync(question, result, tokens[question.Tenant], ownDocuments[question.Tenant], header, ct);
+                            break;
+                        case RunMode.Agent:
+                            await RunAgentAsync(question, result, ownDocuments[question.Tenant], header, ct);
+                            break;
                     }
 
                     outcome.Results.Add(result);
@@ -186,21 +202,77 @@ public class EvalRunner
             result.FirstHitRank = RetrievalMetrics.FirstHitRank(ask.Sources.Select(s => s.Text).ToList(), question.Anchors);
         }
 
+        await ScoreAsync(question, result, ask.Answer, ask.Refused, header, ct);
+    }
+
+    private async Task RunAgentAsync(EvalQuestion question, QuestionResult result, HashSet<Guid> own, RunHeader header, CancellationToken ct)
+    {
+        var credentials = _tenants[question.Tenant];
+        var token = await _api.LoginAsync(credentials.Email, credentials.Password, ct);
+
+        var stopwatch = Stopwatch.StartNew();
+        var transcript = await _agent!.AskAsync(new AgentRequest(question.Question, token), ct);
+        result.LatencyMs = stopwatch.ElapsedMilliseconds;
+
+        EnsureOwnDocuments(transcript.ToolResults.SelectMany(ChunkBlockParser.DocumentIds), own, question.Id);
+
+        if (transcript.PermissionDenials.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Question {question.Id}: the claude CLI denied tool calls ({string.Join(", ", transcript.PermissionDenials.Distinct())}) — check --allowedTools; a denied tool must not be scored as a wrong answer.");
+        }
+
+        if (transcript.IsError)
+        {
+            throw new InvalidOperationException($"Question {question.Id}: the claude CLI reported an error: {transcript.Answer}");
+        }
+
+        var chunks = transcript.ToolResults.SelectMany(ChunkBlockParser.Parse).ToList();
+        header.AgentModel ??= transcript.Model;
+        result.ToolCalls = transcript.ToolCalls;
+        result.Turns = transcript.Turns;
+        result.AgentCostUsd = transcript.CostUsd;
+        result.InputTokens = transcript.InputTokens;
+        result.OutputTokens = transcript.OutputTokens;
+        result.SeenChunkIds = chunks.Select(c => c.ChunkId).Distinct().ToList();
+        result.RetrievedTokens = 0;
+        if (result.Labelable)
+        {
+            result.RetrievedRelevant = chunks.Any(c => AnchorMatcher.IsRelevant(c.Text, question.Anchors));
+        }
+
+        if (transcript.TimedOut)
+        {
+            result.Correct = false;
+            result.Refused = false;
+            result.JudgeReason = "timeout";
+            return;
+        }
+
+        result.Answer = transcript.Answer;
+        // An agent explains its refusal ("these are Apple's filings, not JPMorgan's. <refusal sentence>"), so the
+        // sentence is matched anywhere in the answer rather than as the whole answer, as /api/ask's single model does.
+        result.Refused = transcript.Answer.Contains(AgentPromptConstants.RefusalSentence, StringComparison.Ordinal);
+        await ScoreAsync(question, result, transcript.Answer, result.Refused.Value, header, ct);
+    }
+
+    private async Task ScoreAsync(EvalQuestion question, QuestionResult result, string answer, bool refused, RunHeader header, CancellationToken ct)
+    {
         switch (question.Expected.Kind)
         {
             case ExpectedKind.Refusal:
-                result.Correct = ask.Refused;
+                result.Correct = refused;
                 break;
             case ExpectedKind.Number:
-                result.Correct = !ask.Refused && NumberScorer.Matches(
-                    ask.Answer, question.Expected.Value!.Value, question.Expected.Unit, question.Expected.Tolerance);
+                result.Correct = !refused && NumberScorer.Matches(
+                    answer, question.Expected.Value!.Value, question.Expected.Unit, question.Expected.Tolerance);
                 break;
-            case ExpectedKind.Text when ask.Refused:
+            case ExpectedKind.Text when refused:
                 result.Correct = false;
                 result.JudgeReason = "refused";
                 break;
             case ExpectedKind.Text:
-                var verdict = await _judge!.JudgeAsync(question.Question, question.Expected.Text!, ask.Answer, ct);
+                var verdict = await _judge!.JudgeAsync(question.Question, question.Expected.Text!, answer, ct);
                 result.Correct = verdict.Correct;
                 result.JudgeReason = verdict.Reason;
                 header.JudgeInputTokens += verdict.InputTokens;

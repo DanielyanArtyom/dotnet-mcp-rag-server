@@ -9,6 +9,7 @@ public class SettingsDto
     public SearchSettingsDto Search { get; set; } = new();
     public string IngestProfile { get; set; } = default!;
     public string PromptHash { get; set; } = default!;
+    public McpSettingsDto Mcp { get; set; } = new();
 }
 
 public class ChatSettingsDto
@@ -42,4 +43,9 @@ public class SearchSettingsDto
     public double LexicalWeight { get; set; }
     public double VectorWeight { get; set; }
     public int? MaxChunksPerDocument { get; set; }
+}
+
+public class McpSettingsDto
+{
+    public bool ContextTool { get; set; }
 }

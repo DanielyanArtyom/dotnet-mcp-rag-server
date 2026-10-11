@@ -44,4 +44,13 @@ public class DocumentChunkRepository : IDocumentChunkRepository
             .ToListAsync(ct);
         return _mapper.Map<List<DocumentChunk>>(dbEntities);
     }
+
+    public async Task<List<DocumentChunk>> GetByIndexRangeAsync(Guid documentId, int fromIndex, int toIndex, CancellationToken ct = default)
+    {
+        var dbEntities = await _context.DocumentChunks
+            .Where(c => c.DocumentId == documentId && c.ChunkIndex >= fromIndex && c.ChunkIndex <= toIndex)
+            .OrderBy(c => c.ChunkIndex)
+            .ToListAsync(ct);
+        return _mapper.Map<List<DocumentChunk>>(dbEntities);
+    }
 }

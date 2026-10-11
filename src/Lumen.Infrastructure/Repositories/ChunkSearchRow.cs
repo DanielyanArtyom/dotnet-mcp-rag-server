@@ -10,6 +10,7 @@ public class ChunkSearchRow
     public int ChunkType { get; set; }
     public int TokenCount { get; set; }
     public string Text { get; set; } = default!;
+    public string? ContextHeader { get; set; }
     public double Distance { get; set; }
     public double? Score { get; set; }
 }

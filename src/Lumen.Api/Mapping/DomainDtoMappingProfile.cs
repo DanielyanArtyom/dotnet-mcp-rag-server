@@ -1,5 +1,3 @@
-using Lumen.Domain.Models;
-
 namespace Lumen.Api.Mapping;
 
 public class DomainDtoMappingProfile : Profile

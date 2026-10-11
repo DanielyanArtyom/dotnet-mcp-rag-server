@@ -20,6 +20,7 @@ public static class ApplicationBuilderExtension
 
     public static IApplicationBuilder UseMiddlewares(this IApplicationBuilder app)
     {
+        app.UseMiddleware<McpOriginMiddleware>();
         app.UseMiddleware<TenantResolutionMiddleware>();
 
         return app;

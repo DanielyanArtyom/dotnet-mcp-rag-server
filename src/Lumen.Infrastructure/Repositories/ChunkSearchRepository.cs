@@ -31,6 +31,7 @@ public class ChunkSearchRepository : IChunkSearchRepository
                c."ChunkType",
                c."TokenCount",
                c."Text",
+               c."ContextHeader",
                r.dist AS "Distance",
                NULL::double precision AS "Score"
         FROM capped r
@@ -92,6 +93,7 @@ public class ChunkSearchRepository : IChunkSearchRepository
                c."ChunkType",
                c."TokenCount",
                c."Text",
+               c."ContextHeader",
                (c."Embedding" <=> @query)::double precision AS "Distance",
                f."Score"::double precision AS "Score"
         FROM capped f
@@ -154,6 +156,7 @@ public class ChunkSearchRepository : IChunkSearchRepository
             ChunkType = (ChunkType)r.ChunkType,
             TokenCount = r.TokenCount,
             Text = r.Text,
+            ContextHeader = r.ContextHeader,
             Distance = r.Distance,
             Score = r.Score
         }).ToList();

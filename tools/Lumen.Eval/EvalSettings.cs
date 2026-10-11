@@ -8,6 +8,7 @@ public class EvalSettings
     public Dictionary<string, TenantCredentials> Tenants { get; set; } = [];
     public JudgeSettings Judge { get; set; } = new();
     public Dictionary<string, ModelPrice> Prices { get; set; } = [];
+    public AgentSettings Agent { get; set; } = new();
 }
 
 public class JudgeSettings
@@ -21,4 +22,12 @@ public class ModelPrice
 {
     public decimal InputPerMillion { get; set; }
     public decimal OutputPerMillion { get; set; }
+}
+
+public class AgentSettings
+{
+    public string ClaudePath { get; set; } = "claude";
+    public string Model { get; set; } = "sonnet";
+    public int TimeoutSeconds { get; set; } = 180;
+    public string? McpUrl { get; set; }
 }

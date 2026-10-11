@@ -16,6 +16,7 @@ public class ComparisonReport
     public double MrrA { get; set; }
     public double MrrB { get; set; }
     public double MrrPValue { get; set; }
+    public bool RetrievalComparable { get; set; }
 }
 
 public static class RunComparer
@@ -31,6 +32,8 @@ public static class RunComparer
         var labelableA = collapsedA.Values.Where(r => r.Labelable).Select(r => r.Id).ToHashSet();
         var labelableB = collapsedB.Values.Where(r => r.Labelable).Select(r => r.Id).ToHashSet();
         var bothFull = headerA.Mode == RunMode.Full && headerB.Mode == RunMode.Full;
+        var bothAnswering = headerA.Mode.IsAnswering() && headerB.Mode.IsAnswering();
+        var retrievalComparable = headerA.Mode != RunMode.Agent && headerB.Mode != RunMode.Agent;
 
         var report = new ComparisonReport
         {
@@ -38,20 +41,26 @@ public static class RunComparer
             LabelableMismatch = !labelableA.SetEquals(labelableB),
             ModeMismatch = headerA.Mode != headerB.Mode,
             ContextTopKMismatch = bothFull && headerA.ContextTopK() is { } topKA && headerB.ContextTopK() is { } topKB && topKA != topKB,
-            QuestionsCompared = bothFull ? shared.Count : retrievalShared.Count,
-            Hit5AOnly = retrievalShared.Where(id => collapsedA[id].FirstHitRank <= 5 && !(collapsedB[id].FirstHitRank <= 5)).ToList(),
-            Hit5BOnly = retrievalShared.Where(id => !(collapsedA[id].FirstHitRank <= 5) && collapsedB[id].FirstHitRank <= 5).ToList()
+            QuestionsCompared = bothAnswering ? shared.Count : retrievalComparable ? retrievalShared.Count : 0,
+            RetrievalComparable = retrievalComparable,
+            Hit5PValue = 1,
+            MrrPValue = 1
         };
 
-        report.Hit5PValue = Significance.McNemarExact(report.Hit5AOnly.Count, report.Hit5BOnly.Count);
+        if (retrievalComparable)
+        {
+            report.Hit5AOnly = retrievalShared.Where(id => collapsedA[id].FirstHitRank <= 5 && !(collapsedB[id].FirstHitRank <= 5)).ToList();
+            report.Hit5BOnly = retrievalShared.Where(id => !(collapsedA[id].FirstHitRank <= 5) && collapsedB[id].FirstHitRank <= 5).ToList();
+            report.Hit5PValue = Significance.McNemarExact(report.Hit5AOnly.Count, report.Hit5BOnly.Count);
 
-        var rrA = retrievalShared.Select(id => RetrievalMetrics.ReciprocalRank(collapsedA[id].FirstHitRank)).ToList();
-        var rrB = retrievalShared.Select(id => RetrievalMetrics.ReciprocalRank(collapsedB[id].FirstHitRank)).ToList();
-        report.MrrA = rrA.Count == 0 ? 0 : rrA.Average();
-        report.MrrB = rrB.Count == 0 ? 0 : rrB.Average();
-        report.MrrPValue = Significance.PairedRandomization(rrA, rrB);
+            var rrA = retrievalShared.Select(id => RetrievalMetrics.ReciprocalRank(collapsedA[id].FirstHitRank)).ToList();
+            var rrB = retrievalShared.Select(id => RetrievalMetrics.ReciprocalRank(collapsedB[id].FirstHitRank)).ToList();
+            report.MrrA = rrA.Count == 0 ? 0 : rrA.Average();
+            report.MrrB = rrB.Count == 0 ? 0 : rrB.Average();
+            report.MrrPValue = Significance.PairedRandomization(rrA, rrB);
+        }
 
-        if (bothFull)
+        if (bothAnswering)
         {
             report.AccuracyAOnly = shared.Where(id => collapsedA[id].Correct == true && collapsedB[id].Correct != true).ToList();
             report.AccuracyBOnly = shared.Where(id => collapsedA[id].Correct != true && collapsedB[id].Correct == true).ToList();

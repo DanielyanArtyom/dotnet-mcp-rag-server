@@ -15,17 +15,18 @@ public class CategorySummary
     public double? HitAt5 { get; set; }
     public double? Mrr { get; set; }
     public double? Accuracy { get; set; }
+    public double? RetrievedRelevantRate { get; set; }
 }
 
 public class RunSummary
 {
     public int Rows { get; set; }
     public int RetrievalQuestions { get; set; }
-    public double HitAt1 { get; set; }
-    public double HitAt3 { get; set; }
-    public double HitAt5 { get; set; }
-    public double HitAt10 { get; set; }
-    public double Mrr { get; set; }
+    public double? HitAt1 { get; set; }
+    public double? HitAt3 { get; set; }
+    public double? HitAt5 { get; set; }
+    public double? HitAt10 { get; set; }
+    public double? Mrr { get; set; }
     public double MeanRetrievedTokens { get; set; }
     public double? Accuracy { get; set; }
     public double? FalseAnswerRate { get; set; }
@@ -39,6 +40,8 @@ public class RunSummary
     public long ReasoningTokens { get; set; }
     public decimal? CostUsd { get; set; }
     public double? RepeatFlipRate { get; set; }
+    public double? RetrievedRelevantRate { get; set; }
+    public double? MeanToolCalls { get; set; }
     public List<CategorySummary> ByCategory { get; set; } = [];
 }
 
@@ -48,17 +51,18 @@ public static class RunSummaryBuilder
     {
         var retrieval = results.Where(r => r.Labelable && r.ExpectedKind != ExpectedKind.Refusal).ToList();
         var ranks = retrieval.Select(r => r.FirstHitRank).ToList();
-        var full = mode == RunMode.Full;
+        var answering = mode.IsAnswering();
+        var ranked = mode != RunMode.Agent;
 
         var summary = new RunSummary
         {
             Rows = results.Count,
             RetrievalQuestions = retrieval.Count,
-            HitAt1 = RetrievalMetrics.HitAt(ranks, 1),
-            HitAt3 = RetrievalMetrics.HitAt(ranks, 3),
-            HitAt5 = RetrievalMetrics.HitAt(ranks, 5),
-            HitAt10 = RetrievalMetrics.HitAt(ranks, 10),
-            Mrr = RetrievalMetrics.Mrr(ranks),
+            HitAt1 = ranked ? RetrievalMetrics.HitAt(ranks, 1) : null,
+            HitAt3 = ranked ? RetrievalMetrics.HitAt(ranks, 3) : null,
+            HitAt5 = ranked ? RetrievalMetrics.HitAt(ranks, 5) : null,
+            HitAt10 = ranked ? RetrievalMetrics.HitAt(ranks, 10) : null,
+            Mrr = ranked ? RetrievalMetrics.Mrr(ranks) : null,
             MeanRetrievedTokens = results.Count == 0 ? 0 : results.Average(r => r.RetrievedTokens),
             LatencyP50 = RetrievalMetrics.Percentile(results.Select(r => (double)r.LatencyMs).ToList(), 50),
             LatencyP95 = RetrievalMetrics.Percentile(results.Select(r => (double)r.LatencyMs).ToList(), 95),
@@ -68,7 +72,7 @@ public static class RunSummaryBuilder
             TruncatedCount = results.Count(r => r.Truncated == true)
         };
 
-        if (full)
+        if (answering)
         {
             summary.Accuracy = Rate(results, r => r.Correct == true);
             summary.FalseAnswerRate = Rate(results.Where(r => r.ExpectedKind == ExpectedKind.Refusal).ToList(), r => r.Refused != true);
@@ -76,7 +80,7 @@ public static class RunSummaryBuilder
 
             foreach (var r in retrieval)
             {
-                var hit = r.FirstHitRank is not null;
+                var hit = mode == RunMode.Agent ? r.RetrievedRelevant == true : r.FirstHitRank is not null;
                 var correct = r.Correct == true;
                 if (hit && correct) summary.Grid.HitCorrect++;
                 else if (hit) summary.Grid.HitWrong++;
@@ -84,7 +88,11 @@ public static class RunSummaryBuilder
                 else summary.Grid.MissWrong++;
             }
 
-            if (price is not null)
+            if (mode == RunMode.Agent)
+            {
+                summary.CostUsd = results.Any(r => r.AgentCostUsd is not null) ? results.Sum(r => r.AgentCostUsd ?? 0m) : null;
+            }
+            else if (price is not null)
             {
                 summary.CostUsd = (summary.InputTokens * price.InputPerMillion + summary.OutputTokens * price.OutputPerMillion) / 1_000_000m;
             }
@@ -96,16 +104,24 @@ public static class RunSummaryBuilder
             }
         }
 
+        if (mode == RunMode.Agent)
+        {
+            summary.RetrievedRelevantRate = Rate(retrieval, r => r.RetrievedRelevant == true);
+            summary.MeanToolCalls = results.Count == 0 ? null : results.Average(r => r.ToolCalls.Count);
+        }
+
         summary.ByCategory = results.GroupBy(r => r.Category).OrderBy(g => g.Key).Select(g =>
         {
-            var categoryRanks = g.Where(r => r.Labelable && r.ExpectedKind != ExpectedKind.Refusal).Select(r => r.FirstHitRank).ToList();
+            var categoryRetrieval = g.Where(r => r.Labelable && r.ExpectedKind != ExpectedKind.Refusal).ToList();
+            var categoryRanks = categoryRetrieval.Select(r => r.FirstHitRank).ToList();
             return new CategorySummary
             {
                 Category = g.Key,
                 Count = g.Count(),
-                HitAt5 = categoryRanks.Count == 0 ? null : RetrievalMetrics.HitAt(categoryRanks, 5),
-                Mrr = categoryRanks.Count == 0 ? null : RetrievalMetrics.Mrr(categoryRanks),
-                Accuracy = full ? Rate(g.ToList(), r => r.Correct == true) : null
+                HitAt5 = !ranked || categoryRanks.Count == 0 ? null : RetrievalMetrics.HitAt(categoryRanks, 5),
+                Mrr = !ranked || categoryRanks.Count == 0 ? null : RetrievalMetrics.Mrr(categoryRanks),
+                Accuracy = answering ? Rate(g.ToList(), r => r.Correct == true) : null,
+                RetrievedRelevantRate = ranked ? null : Rate(categoryRetrieval, r => r.RetrievedRelevant == true)
             };
         }).ToList();
 

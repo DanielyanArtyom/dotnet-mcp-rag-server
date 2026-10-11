@@ -1,8 +1,12 @@
+global using Lumen.Api.Constants;
+global using Lumen.Api.DependencyInjection;
 global using Lumen.Api.DTO.Responses;
 global using Lumen.Application.Ask;
+global using Lumen.Application.Search;
 global using Lumen.Application.Auth;
 global using Lumen.Domain.Entities;
 global using Lumen.Domain.Enums;
+global using Lumen.Domain.Models;
 global using Lumen.Infrastructure.Constants;
 global using Lumen.Infrastructure.DependencyInjection;
 global using Lumen.Infrastructure.Persistence;
@@ -16,6 +20,7 @@ global using Lumen.Application.Exceptions;
 global using Lumen.Application.Documents.Commands;
 global using Lumen.Application.Documents.Queries;
 global using Lumen.Api.Extensions;
+global using Lumen.Application.Interfaces;
 
 global using Microsoft.AspNetCore.Authorization;
 global using Microsoft.AspNetCore.Diagnostics;
@@ -26,9 +31,11 @@ global using Microsoft.AspNetCore.Authentication.JwtBearer;
 global using Microsoft.Extensions.Options;
 global using Microsoft.IdentityModel.Tokens;
 
+global using System.ComponentModel;
 global using System.Security.Claims;
 global using System.Text;
 
 global using AutoMapper;
 global using MediatR;
 global using NLog.Web;
+global using ModelContextProtocol.Server;
