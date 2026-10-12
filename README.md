@@ -233,6 +233,11 @@ Defaults in `src/Lumen.Api/appsettings.json` are the measured final configuratio
 | `Embeddings:Provider` / `Chat:Provider` | `Fake` | or `AzureOpenAI` |
 | `Mcp:ContextTool` | `false` | exposes `get_chunk_context` (neighbouring chunks) |
 | `Mcp:AllowedOrigins` | `[]` | allowed `Origin` values on `/mcp`; Development adds the MCP Inspector |
+| `Database:MigrateOnStartup` | `false` | apply EF migrations at startup (on in Development and in compose) |
+| `Database:SeedDemoData` | `false` | seed demo tenants/users (on in Development and in compose) |
+| `Demo:FilingsPath` | empty | folder with `manifest.json` and filings to ingest on startup (compose: `/seed`) |
+| `Swagger:Enabled` | Development only | serve Swagger UI |
+| `Logs:FileMinLevel` | `Info` | `Off` disables the rolling file (compose logs to stdout only) |
 
 Changing any `Chunking` setting changes the ingest profile, so delete and re-upload the documents. `Search`, `Chat` and `Mcp` settings need only a restart.
 
@@ -243,9 +248,9 @@ Changing any `Chunking` setting changes the ingest profile, so delete and re-upl
 - **AI providers:** `Microsoft.Extensions.AI` (`IEmbeddingGenerator`, `IChatClient`) over the plain `OpenAI` client against Azure OpenAI's v1 API, with either an API key or Microsoft Entra ID. No `Azure.AI.OpenAI` package. The default `Fake` providers are deterministic and need no network, so the project builds, runs and tests with no Azure account.
 - **Search:** exact (non-ANN) cosine search. About 300 ms over ~5,000 chunks, so no HNSW index yet.
 - **Errors:** global exception handling via `IExceptionHandler` maps domain exceptions to `ProblemDetails`. An AI-provider failure returns 503.
-- **Seed data:** in Development only, two tenants (Acme, Globex), each with an admin user and a sample document.
+- **Seed data:** behind `Database:SeedDemoData` (on in Development and in compose): two tenants (Acme, Globex), each with an admin user. With `Demo:FilingsPath` set (compose mounts `samples/edgar/` read-only at `/seed`), the four filings in its `manifest.json` are ingested too, skipping titles that already exist.
 - **MCP:** `ModelContextProtocol.AspNetCore` 2.2.0, stateless Streamable HTTP at `/mcp` behind the same JWT bearer scheme; tools call the Application layer through MediatR and return Markdown; an `Origin` check guards `/mcp`; a call-tool filter turns domain exceptions into actionable tool errors without leaking details.
-- **Tests:** 426 passing (230 unit, 106 eval harness, 90 integration against a real Postgres container), including a characterization test on a real Apple 10-K.
+- **Tests:** 512 passing (304 unit, 106 eval harness, 102 integration against a real Postgres container), including a characterization test on a real Apple 10-K.
 
 ## Tech stack
 
@@ -267,12 +272,32 @@ Changing any `Chunking` setting changes the ingest profile, so delete and re-upl
 
 ## Getting started
 
-**Run:**
+### Run with Docker
+
+Needs only Docker. The stack is Postgres (pgvector) plus the API, with four EDGAR filings seeded on first start.
 
 ```bash
-docker compose up -d # pgvector/pgvector:pg17, pulled on first run
+cp .env.example .env     # then fill JWT_SECRET (required): openssl rand -hex 32
+docker compose up --build
+```
+
+- Swagger: <http://localhost:5119/swagger> · readiness: <http://localhost:5119/health/ready> · MCP: `http://localhost:5119/mcp` (see [Connect from Claude Code](#connect-from-claude-code-mcp)).
+- Log in with `admin@acme.test` or `admin@globex.test`, password `Passw0rd!`.
+- On first start the API applies the migrations and seeds four filings from `samples/edgar/`: Apple 10-K and 10-Q for Acme Corp, Morgan 10-K and 10-Q for Globex Inc. The default providers are `Fake`, so nothing calls the network and the rankings are not meaningful; the point is a working pipeline. Measured on an Apple Silicon laptop: the image is 202 MB, and a cold start to `/health/ready` takes about 7.5 s including migrations and seeding all four filings (4,650 chunks). A restart on an already seeded database takes about 1.2 s.
+- Compose sets `AllowedHosts=localhost;127.0.0.1`, so call the API via `localhost` (a LAN IP gets 400 unless you change `AllowedHosts`).
+- If `JWT_SECRET` is missing, the `api` container crash-loops and `docker compose ps` still shows it as `Up`. Check `docker compose logs api` for the `Jwt:Secret` error.
+- If the local Postgres volume already holds a corpus from `dotnet run` (for example with Azure embeddings), start the demo from a clean database with `docker compose down -v` first, because seeding skips titles that already exist. Careful: `down -v` deletes the local database and the stored raw files.
+- **Azure OpenAI instead of `Fake`:** set `EMBEDDINGS_PROVIDER=AzureOpenAI` (and the `EMBEDDINGS_*` values) or `CHAT_PROVIDER=AzureOpenAI` (and the `CHAT_*` values) in `.env`. Changing the embeddings provider requires `docker compose down -v` so that vectors from two models never share a table; changing chat does not.
+- **Smoke test:** `tools/compose-smoke.sh` builds the image, starts an isolated stack (project `lumen-smoke`, ports 55119 and 55432, always `Fake` providers), checks health, seeded documents, search, ask and MCP `tools/list` for both tenants, restarts it to confirm persistence and that seeding is skipped, then removes its own volumes. It does not touch your regular compose project.
+
+### Run from source
+
+```bash
+docker compose up -d postgres # pgvector/pgvector:pg17, pulled on first run
 dotnet run --project src/Lumen.Api
 ```
+
+Use `docker compose up -d postgres`, not plain `docker compose up -d`: the latter also starts the containerized API on port 5119, which collides with `dotnet run`.
 
 Open the printed Swagger URL and log in with a seeded user: `admin@acme.test` or `admin@globex.test`, password `Passw0rd!`. Upload a filing with `POST /api/documents/upload` (HTML from [SEC EDGAR](https://www.sec.gov/edgar/search/)), then query it with `POST /api/search` or `POST /api/ask`.
 
@@ -289,7 +314,7 @@ dotnet user-secrets set "Embeddings:ApiKey" "<key>"   # or omit to use Microsoft
 # same keys under Chat:* for the answering model
 ```
 
-After switching embeddings, recreate the database (`docker compose down -v && docker compose up -d`) and re-upload: vectors from different embedding models must never share a ranking. Switching chat needs no reset.
+After switching embeddings, recreate the database (`docker compose down -v && docker compose up -d postgres`) and re-upload: vectors from different embedding models must never share a ranking. Switching chat needs no reset.
 
 **Run the eval.** Upload the filings into the two tenants (Acme: Apple, Globex: JPMorgan), put the judge's key in `tools/Lumen.Eval/appsettings.Local.json` (gitignored) or the `LUMEN_EVAL_Judge__ApiKey` environment variable, then:
 
@@ -358,6 +383,18 @@ DOCKER_API_VERSION=1.43 dotnet test
 
 (match your own `docker version --format '{{.Server.APIVersion}}'`).
 
+## How I'd deploy to Azure
+
+Not deployed yet; this is the plan, with the facts it rests on taken from Microsoft Learn.
+
+- **Compute:** Azure App Service for Containers running the same image. Set `WEBSITES_PORT=8080` so App Service knows the container port.
+- **Health check:** configure the path `/health/ready`. App Service pings every instance once a minute; an instance that fails 10 pings (`WEBSITE_HEALTHCHECK_MAXPINGFAILURES`, 2 to 10) is removed from the load balancer. A ping fails on a non-2xx answer, a redirect or a 1-minute timeout, and the path must allow anonymous access, which `/health/ready` does. The check only gives full benefit with 2 or more instances.
+- **Database:** Azure Database for PostgreSQL Flexible Server. Allow-list the extension by adding `vector` to the `azure.extensions` server parameter (the name is `vector`, not `pgvector`); the Lumen migration then runs `CREATE EXTENSION vector`. Flexible Server ships pgvector 0.8.2 (local Docker has a newer one); Lumen only uses `vector(1536)`, the `<=>` operator and exact scans, which that version supports.
+- **Secrets:** App Settings as [Key Vault references](https://learn.microsoft.com/azure/app-service/app-service-key-vault-references) (`@Microsoft.KeyVault(SecretUri=...)`) for `Jwt__Secret` and `ConnectionStrings__Default`, resolved by the app's system-assigned identity with the Key Vault Secrets User role. An unresolved reference reaches the app as a literal string, so the fail-fast `Jwt:Secret` check (at least 32 bytes) catches a misconfigured vault.
+- **Azure OpenAI without keys:** leave `Embeddings:ApiKey` and `Chat:ApiKey` empty. The existing code path then uses `DefaultAzureCredential` (the managed identity) against the v1 API, so only a role assignment on the Azure OpenAI resource is needed.
+- **Raw files:** the container filesystem is ephemeral, so replace `LocalFileStorage` with a Blob Storage implementation of `IFileStorage` (the seam already exists), authenticated with the managed identity.
+- **Migrations:** run an EF migration bundle as a deploy step, the production path Microsoft recommends. The `Database:MigrateOnStartup` flag stays acceptable for one or two instances, because Npgsql serializes concurrent migrators with a table lock, but then the app's database user needs DDL rights.
+
 ## Roadmap
 
 1. ✅ Skeleton: Onion Architecture, multi-tenancy via `TenantId`
@@ -365,5 +402,5 @@ DOCKER_API_VERSION=1.43 dotnet test
 3. ✅ Embeddings + storage: Azure OpenAI + pgvector, exact tenant-scoped vector search
 4. ✅ RAG endpoint: retrieval, generation with citations, eval-driven tuning
 5. ✅ MCP server: tenant-scoped search as MCP tools over HTTP, verified with MCP Inspector and Claude Code, measured against the RAG endpoint
-6. Deploy: Azure App Service, managed identity, health checks
-7. Polish: demo GIF, screenshots, one-command `docker compose up`
+6. Deploy / run anywhere: 6A run anywhere ✅ (Dockerfile, `docker compose up`, health endpoints, seeded demo filings); 6B table-aware chunking ✅; Azure App Service deploy (managed identity, Key Vault) — not started (see "How I'd deploy to Azure")
+7. Polish: demo GIF, screenshots

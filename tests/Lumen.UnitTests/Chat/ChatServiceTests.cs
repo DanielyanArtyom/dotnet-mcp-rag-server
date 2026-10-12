@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace Lumen.UnitTests.Chat;
 
 public class ChatServiceTests

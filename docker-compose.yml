@@ -4,11 +4,50 @@ services:
     environment:
       POSTGRES_DB: lumen
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - lumen-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-5119}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=lumen;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
+      Jwt__Secret: ${JWT_SECRET:-}
+      AllowedHosts: localhost;127.0.0.1
+      Mcp__AllowedOrigins__0: ${MCP_ALLOWED_ORIGIN:-http://localhost:6274}
+      Embeddings__Provider: ${EMBEDDINGS_PROVIDER:-Fake}
+      Embeddings__Endpoint: ${EMBEDDINGS_ENDPOINT:-}
+      Embeddings__Deployment: ${EMBEDDINGS_DEPLOYMENT:-}
+      Embeddings__ApiKey: ${EMBEDDINGS_API_KEY:-}
+      Chat__Provider: ${CHAT_PROVIDER:-Fake}
+      Chat__Endpoint: ${CHAT_ENDPOINT:-}
+      Chat__Deployment: ${CHAT_DEPLOYMENT:-}
+      Chat__ApiKey: ${CHAT_API_KEY:-}
+      Database__MigrateOnStartup: "true"
+      Database__SeedDemoData: "true"
+      Demo__FilingsPath: /seed
+      DocumentStorage__RootPath: /data/documents
+      Swagger__Enabled: "true"
+      Logs__FileMinLevel: "Off"
+    volumes:
+      - lumen-documents:/data
+      - ./samples/edgar:/seed:ro
 
 volumes:
   lumen-postgres-data:
+  lumen-documents:

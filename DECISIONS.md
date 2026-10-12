@@ -261,3 +261,63 @@ Entries are kept in chronological order, which is also stage order. Written in E
 **Why:** the raw answers were in Russian — the user-level CLAUDE.md overrode the `--append-system-prompt` rule "Always answer in English" — so the number scorer could not read "$416 161 млн" or "46,9 %", and the agent's refusals came with an explanation, which an exact match rejected. `--safe-mode` was tried and rejected: it also disables the MCP server. After the fix the same configuration scored 87 % (40 % → 87 %, nothing else changed). Same lesson as the Stage 4 mixed-corpus baseline: when a metric moves this far, check the environment before the system.
 
 **Would revisit when:** Claude Code changes how settings and memory are loaded, or a different agent client is evaluated — each needs its own isolation check before its numbers count.
+
+## 2026-10-12 Split tables keep their header, row group and caption (`TableCells`, `TableHeaders`, `TableCaptions` = true)
+
+**Context:** a 10-K/10-Q table longer than the 250-token budget was cut into chunks, and every continuation chunk lost its column header: the JPM 10-Q chunk holding `CET1 capital | 14.2 | % | 15.1 | % …` had no years and no "Standardized" header, and its row-group label `Capital ratios - Standardized(a)` ended the previous chunk, so `/api/ask` refused. The caption ("The following table provides…") sat in the preceding prose chunk, and the reader dropped empty cells, which shifted columns. Unstructured and Docling repeat headers only from `<thead>`/`<th>`, which EDGAR HTML never uses, so the header had to be detected from the cell grid (a prototype aligned the columns of 97.8–100 % of the tables with data rows in the four filings). The eval set gained 5 JPM questions whose answer row sits in a continuation chunk (41 questions, n = 35 scored).
+
+**Options:** (a) today's text; (D) colspan grid with `$`/`%` merged into numbers and empty cells kept in position; (D + A′ + B) plus the header rows and the open row-group label repeated in every continuation chunk, and the caption copied into every table chunk; (C) a key-value row format `label | 2025: $34,550 | …`.
+
+**Decision:** D + A′ + B on by default; C stays off (next entry).
+
+**Why:** accuracy 77 % → 80 %, MRR 0.524 → 0.565, hit@3 52 % → 62 %, hit@1 45 % → 48 %, 0 % false answers. It fixes the Stage 4 failure `g-cet1-q2-26` (refused → correct) and a new continuation question (CCB employees: not retrieved → rank 2, correct), at a cost of +3–9 % chunks. **Not statistically significant:** 2 gained / 1 lost against the baseline (McNemar p = 1.0; n = 35 needs about 6:0). D alone was 2 lost / 0 gained, and both losses were rank swaps between near-identical headerless tables, not lost rows. Two costs are visible. A one-row continuation that now carries a long repeated header became too similar to its neighbours and dropped out of the top 10, the same effect the context header showed at Stage 4. Three of the five new questions are not retrieved at any setting. The measurement also caught a bug: a first chunk whose caption plus header overflowed the budget was repacked without its caption (2 such chunks per JPM filing, 63 under C). The fix brought this to 0 and left the ladder's metrics unchanged.
+
+**Would revisit when:** the eval set is large enough for significance. Also when a better header detector for text tables is built: a table whose first numeric row comes late (the Rule 10b5-1 table: `… | 200,000`) gets a 4-row "header", which is too big to repeat, so `g-dimon-10b5-1` (holdout) still refuses. That is a known limitation. Same for tables whose header lives in a separate `<table>` above (143 JPM 10-K tables; not built).
+
+## 2026-10-12 The key-value table format stays off (`TableFormat = Pipe`)
+
+**Context:** with the header detected, every value can carry its column label (`Research and development | 2025: $34,550 | Change: 10% | …`, `Risk-based capital metrics › CET1 capital ratio | Standardized, JPMorgan Chase & Co.: 14.2% | …`). TableRAG and Docling's default serializer use this kind of self-describing cell. Measured on top of the header/caption step.
+
+**Options:** (a) pipe rows with aligned slots; (b) key-value rows.
+
+**Decision:** (a).
+
+**Why:** no gain at a large cost. Accuracy 80 % → 77 % (0 gained / 1 lost, p = 1.0), MRR 0.565 → 0.561, while JPM 10-Q chunks grew 1,444 → 2,280 (+58 %) and the 10-K 2,596 → 3,166. It did move `g-cet1-q2-26` to rank 1, but the answer was already correct at rank 3. Some JPM header spans don't line up with their data columns, so a few key-value labels inherit the wrong period.
+
+**Would revisit when:** retrieval moves to a reranker or a larger context, so that the extra chunks stop competing for 10 slots, or questions appear that need a cell's column named inside the chunk itself, without a header row.
+
+## 2026-10-12 The context header is not added to the `/api/ask` prompt (`Chat:SourceContextHeader = false`)
+
+**Context:** the per-chunk context header ("Morgan 10-K (filed 2025-12-31) — section") reaches embeddings, FTS and MCP results, but `/api/ask` sends the model only the chunk text. The question was whether showing it as a `context="…"` attribute on each `<source>` helps the model; turning it on switches `promptHash` from `ae0bb62cae85`.
+
+**Options:** (a) chunk text only; (b) text plus the context attribute.
+
+**Decision:** (a).
+
+**Why:** zero effect: 0 gained / 0 lost on the header/caption corpus, accuracy 80 % both ways, at about +250 input tokens per question. The table captions already put the needed words into the chunk text.
+
+**Would revisit when:** the prompt or the answering model changes, or questions depend on which filing or section a chunk came from (e.g. 10-K vs 10-Q comparisons, which still fail).
+
+## 2026-10-12 The container runs on `aspnet:10.0-noble-chiseled-extra`, non-root
+
+**Context:** Stage 6A packages Lumen as a container so that `docker compose up` brings up API + Postgres with no .NET SDK installed. The base image decides size, attack surface, whether the process runs as root, and whether ICU is available.
+
+**Options:** (a) `aspnet:10.0` (full Ubuntu, shell, runs as root unless told otherwise); (b) `aspnet:10.0-noble-chiseled` (distroless, non-root, invariant globalization forced); (c) `-chiseled-extra` (distroless and non-root, plus ICU and tzdata).
+
+**Decision:** (c), built with `--platform=$BUILDPLATFORM` and `-a $TARGETARCH` so amd64 and arm64 both build without emulation.
+
+**Why:** the Lumen image is 202 MB on chiseled-extra against 294 MB on the full image (−31 %), and it runs as UID 1654 with no shell or package manager. Plain chiseled would save about 15 MB more (dotnet-docker's size report: 52.8 vs 67.7 MB compressed), but forces invariant globalization. Lumen's own code is culture-invariant, but the code paths inside SemanticKernel's `TextChunker`, AngleSharp and PdfPig are unverified, and a silent change in chunk counts would invalidate every eval baseline. The cost of having no shell: compose can't run an HTTP healthcheck inside the API container (no curl), so only Postgres has a healthcheck, and API health is checked from the host (`/health/ready`, plus `tools/compose-smoke.sh`).
+
+**Would revisit when:** the Apple 10-K characterization test is run once in invariant mode and the chunk count is unchanged; then switch to plain chiseled. Also when a second replica needs an API container healthcheck: then add a `healthcheck` subcommand to the app.
+
+## 2026-10-12 Migrations and demo seeding run at startup behind flags, not as a separate migration job
+
+**Context:** in Production the app had no schema, no users and no data: migrations and seeding ran only in Development. The demo should start with the two tenants and the four EDGAR filings already ingested.
+
+**Options:** (a) an EF migration bundle as a one-shot compose service before the API (Microsoft's recommendation for automated deploys); (b) `MigrateAsync` plus seeding at application startup, behind `Database:MigrateOnStartup`, `Database:SeedDemoData` and `Demo:FilingsPath` (on in Development and compose, off by default).
+
+**Decision:** (b). Filings are seeded through the normal `UploadDocumentCommand`, so a seeded document is identical to an uploaded one (chunks, embeddings, ingest profile, raw file). Every manifest tenant is resolved before the first upload, and already-present titles are skipped.
+
+**Why:** one container and no extra build stage. A cold start including migration and seeding 4,650 chunks with Fake embeddings takes 7.5 s to `/health/ready` (Morgan 10-K, 2,596 chunks, alone takes 3.1 s); a warm restart takes 1.2 s because everything is skipped. Running at startup is safe for more than one instance: with EF Core 9+ on Npgsql, `MigrateAsync` takes `LOCK TABLE "__EFMigrationsHistory" IN ACCESS EXCLUSIVE MODE` for the transaction (provider source), so two replicas are serialized rather than racing. Seeding itself has no such lock.
+
+**Would revisit when:** Lumen is deployed for real (Azure App Service): there a migration bundle as a deploy step gives reviewable SQL and lets the app's database user drop DDL rights. Also if seeding with Azure embeddings pushes startup past the platform's start timeout, or if more than one replica seeds at once.

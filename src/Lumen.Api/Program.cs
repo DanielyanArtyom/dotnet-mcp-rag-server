@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddLumenServices();
@@ -15,19 +17,21 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
-if (app.Environment.IsDevelopment())
+if (app.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-await app.UseDatabaseMigrationAsync();
+await app.UseStartupDataAsync();
 
 app.UseAuthentication();
 app.UseMiddlewares();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks(HealthConstants.LivePath, new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks(HealthConstants.ReadyPath, new HealthCheckOptions { Predicate = c => c.Tags.Contains(HealthConstants.ReadyTag) });
 app.MapMcp(McpConstants.EndpointPath).RequireAuthorization();
 
 app.Run();

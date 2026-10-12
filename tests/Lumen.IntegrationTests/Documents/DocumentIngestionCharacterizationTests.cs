@@ -135,6 +135,43 @@ public class DocumentIngestionCharacterizationTests(PostgresFixture fixture, ITe
         Assert.All(protectedChunks, c => Assert.True(c.TokenCount <= 250));
     }
 
+    [Fact]
+    public async Task With_table_formatting_on_Apple_10K_tables_carry_a_caption_and_aligned_cells_and_the_budget_holds()
+    {
+        using var factory = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Chunking:TableCells", "true");
+            b.UseSetting("Chunking:TableHeaders", "true");
+            b.UseSetting("Chunking:TableCaptions", "true");
+        });
+        using var client = factory.CreateClient();
+        client.Timeout = TimeSpan.FromMinutes(5);
+        var (_, email, password) = await TestDataSeeder.SeedTenantWithUserAsync(fixture.ConnectionString, "CharacterizationTables", Role.Admin);
+        await TestAuth.AuthenticateAsync(client, email, password);
+
+        var fileBytes = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "apple-10k-fy2025.htm"));
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("text/html");
+        content.Add(fileContent, "file", "apple-10k-fy2025.htm");
+        content.Add(new StringContent("Apple 10-K FY2025"), "title");
+        content.Add(new StringContent("2025-10-31"), "filingDate");
+
+        var uploadResponse = await client.PostAsync("/api/documents/upload", content);
+        Assert.Equal(HttpStatusCode.Created, uploadResponse.StatusCode);
+        var uploaded = await uploadResponse.Content.ReadFromJsonAsync<DocumentDto>();
+        var chunks = (await client.GetFromJsonAsync<List<DocumentChunkDto>>($"/api/documents/{uploaded!.Id}/chunks"))!;
+        var document = await client.GetFromJsonAsync<DocumentDto>($"/api/documents/{uploaded.Id}");
+
+        var tableChunks = chunks.Where(c => c.ChunkType == "Table").ToList();
+        output.WriteLine($"Chunks with table formatting on: {chunks.Count} (table {tableChunks.Count}); captioned table chunks: {tableChunks.Count(c => c.Text.StartsWith("Table: "))}");
+
+        Assert.All(chunks, c => Assert.True(c.TokenCount <= 250, $"Chunk {c.ChunkIndex} has {c.TokenCount} tokens"));
+        Assert.Contains(tableChunks, c => c.Text.StartsWith("Table: "));
+        Assert.Contains(tableChunks, c => c.Text.Contains("Research and development | $34,550 | 10% | $31,370"));
+        Assert.EndsWith(";cells=v2;thdr=v2;tcap=v2", document!.IngestProfile);
+    }
+
     private async Task<List<DocumentChunkDto>> UploadAppleAsync(WebApplicationFactory<Program> factory, string tenantName)
     {
         using var client = factory.CreateClient();

@@ -40,9 +40,12 @@ public class SettingsEndpointTests(PostgresFixture fixture) : IAsyncLifetime
         Assert.Equal("Fake", root.GetProperty("chat").GetProperty("provider").GetString());
         Assert.Equal(ChatConstants.FakeModelName, root.GetProperty("chat").GetProperty("deployment").GetString());
         Assert.Equal(10, root.GetProperty("chat").GetProperty("contextTopK").GetInt32());
+        Assert.False(root.GetProperty("chat").GetProperty("sourceContextHeader").GetBoolean());
         Assert.Equal("Fake", root.GetProperty("embeddings").GetProperty("provider").GetString());
         Assert.Equal(EmbeddingConstants.FakeModelName, root.GetProperty("embeddings").GetProperty("model").GetString());
         Assert.Equal(250, root.GetProperty("chunking").GetProperty("maxTokensPerChunk").GetInt32());
+        Assert.False(root.GetProperty("chunking").GetProperty("tableCells").GetBoolean());
+        Assert.Equal("Pipe", root.GetProperty("chunking").GetProperty("tableFormat").GetString());
         Assert.Equal("vector", root.GetProperty("searchMode").GetString());
         Assert.Matches("^[0-9a-f]{12}$", root.GetProperty("promptHash").GetString());
         Assert.False(root.GetProperty("mcp").GetProperty("contextTool").GetBoolean());

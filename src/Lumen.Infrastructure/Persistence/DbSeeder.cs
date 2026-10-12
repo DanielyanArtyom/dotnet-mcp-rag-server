@@ -19,8 +19,8 @@ public static class DbSeeder
         // Sequential, not Task.WhenAll: both calls share the same AppDbContext (not thread-safe
         // for concurrent operations) and the same mutable CurrentTenant that TenantScopedWriter
         // flips for the duration of each write — running them in parallel would race on both.
-        await SeedTenantAsync(context, currentTenant, passwordHasher, tenantA.Id, "admin@acme.test", "Welcome to Acme", "This is Acme's first document.");
-        await SeedTenantAsync(context, currentTenant, passwordHasher, tenantB.Id, "admin@globex.test", "Welcome to Globex", "This is Globex's first document.");
+        await SeedTenantAsync(context, currentTenant, passwordHasher, tenantA.Id, "admin@acme.test");
+        await SeedTenantAsync(context, currentTenant, passwordHasher, tenantB.Id, "admin@globex.test");
     }
 
     private static Task SeedTenantAsync(
@@ -28,9 +28,7 @@ public static class DbSeeder
         CurrentTenant currentTenant,
         IPasswordHasher<User> passwordHasher,
         Guid tenantId,
-        string adminEmail,
-        string documentTitle,
-        string documentContent)
+        string adminEmail)
     {
         return TenantScopedWriter.RunAsync(currentTenant, tenantId, async () =>
         {
@@ -38,16 +36,6 @@ public static class DbSeeder
             user.PasswordHash = passwordHasher.HashPassword(
                 new User { Id = user.Id, TenantId = tenantId, Email = adminEmail, Role = Role.Admin }, "Passw0rd!");
             context.Users.Add(user);
-
-            var documentId = Guid.NewGuid();
-            context.Documents.Add(new DocumentEntity
-            {
-                Id = documentId,
-                Title = documentTitle,
-                Content = documentContent,
-                RawFilePath = $"{tenantId}/{documentId}.htm",
-                FilingDate = DateOnly.FromDateTime(DateTime.UtcNow)
-            });
 
             await context.SaveChangesAsync();
         });

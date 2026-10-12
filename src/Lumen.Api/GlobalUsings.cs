@@ -15,6 +15,7 @@ global using Lumen.Api.DTO.Requests;
 global using Lumen.Api.Middleware;
 global using Lumen.Api.ErrorHandling;
 global using Lumen.Api.Mapping;
+global using Lumen.Api.Seeding;
 global using Lumen.Infrastructure.Mapping;
 global using Lumen.Application.Exceptions;
 global using Lumen.Application.Documents.Commands;

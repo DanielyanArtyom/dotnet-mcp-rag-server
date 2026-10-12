@@ -10,11 +10,12 @@ public static class RagPrompt
 
     private static readonly Regex SourceTag = new("<(/?)(source)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    public static string Hash { get; } =
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
-            PromptConstants.SystemPrompt + "\n" + PromptConstants.RulesReminder + "\n" + PromptConstants.UserTemplateVersion)))[..12];
+    private static readonly string HashWithoutContext = ComputeHash(PromptConstants.UserTemplateVersion);
+    private static readonly string HashWithContext = ComputeHash(PromptConstants.UserTemplateVersionWithContext);
 
-    public static string BuildUserMessage(string question, IReadOnlyList<ChunkSearchResult> sources)
+    public static string HashFor(bool sourceContextHeader) => sourceContextHeader ? HashWithContext : HashWithoutContext;
+
+    public static string BuildUserMessage(string question, IReadOnlyList<ChunkSearchResult> sources, bool sourceContextHeader = false)
     {
         var builder = new StringBuilder();
         builder.AppendLine("<sources>");
@@ -25,8 +26,13 @@ public static class RagPrompt
             builder.Append("<source id=\"").Append(i + 1)
                 .Append("\" title=\"").Append(EscapeAttribute(source.DocumentTitle))
                 .Append("\" filed=\"").Append(source.DocumentFilingDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
-                .Append("\" kind=\"").Append(source.ChunkType.ToString().ToLowerInvariant())
-                .AppendLine("\">");
+                .Append("\" kind=\"").Append(source.ChunkType.ToString().ToLowerInvariant()).Append('"');
+            if (sourceContextHeader && source.ContextHeader is not null)
+            {
+                builder.Append(" context=\"").Append(EscapeAttribute(source.ContextHeader)).Append('"');
+            }
+
+            builder.AppendLine(">");
             builder.AppendLine(SourceTag.Replace(source.Text, "&lt;$1$2"));
             builder.AppendLine("</source>");
         }
@@ -42,6 +48,10 @@ public static class RagPrompt
 
     public static bool IsRefusal(string answer) =>
         string.Equals(CitationMarker.Replace(answer, string.Empty).Trim().TrimEnd('.').TrimEnd(), PromptConstants.RefusalSentence.TrimEnd('.'), StringComparison.OrdinalIgnoreCase);
+
+    private static string ComputeHash(string templateVersion) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
+            PromptConstants.SystemPrompt + "\n" + PromptConstants.RulesReminder + "\n" + templateVersion)))[..12];
 
     private static string EscapeAttribute(string value) =>
         value.Replace("&", "&amp;").Replace("\"", "&quot;").Replace("<", "&lt;");

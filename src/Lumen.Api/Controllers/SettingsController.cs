@@ -45,7 +45,8 @@ public class SettingsController : ControllerBase
                 TopP = _chat.TopP,
                 ReasoningEffort = _chat.ReasoningEffort?.ToString(),
                 MaxOutputTokens = _chat.MaxOutputTokens,
-                ContextTopK = _chat.ContextTopK
+                ContextTopK = _chat.ContextTopK,
+                SourceContextHeader = _chat.SourceContextHeader
             },
             Embeddings = new EmbeddingSettingsDto
             {
@@ -55,7 +56,11 @@ public class SettingsController : ControllerBase
             Chunking = new ChunkingSettingsDto
             {
                 MaxTokensPerChunk = _chunking.MaxTokensPerChunk,
-                OverlapTokens = _chunking.OverlapTokens
+                OverlapTokens = _chunking.OverlapTokens,
+                TableCells = _chunking.TableCells,
+                TableHeaders = _chunking.TableHeaders,
+                TableCaptions = _chunking.TableCaptions,
+                TableFormat = _chunking.TableFormat.ToString()
             },
             SearchMode = searchMode,
             Search = new SearchSettingsDto
@@ -68,7 +73,7 @@ public class SettingsController : ControllerBase
                 MaxChunksPerDocument = _search.MaxChunksPerDocument
             },
             IngestProfile = _ingestProfile.Current,
-            PromptHash = RagPrompt.Hash,
+            PromptHash = RagPrompt.HashFor(_chat.SourceContextHeader),
             Mcp = new McpSettingsDto { ContextTool = _mcp.ContextTool }
         });
     }

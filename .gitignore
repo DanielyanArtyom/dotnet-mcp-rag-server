@@ -26,3 +26,5 @@ App_Data/
 # Eval harness local overrides (judge API key)
 tools/Lumen.Eval/appsettings.Local.json
 
+# Local docker compose secrets (copy from .env.example)
+.env

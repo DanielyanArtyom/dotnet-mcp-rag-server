@@ -19,7 +19,7 @@ public class AskController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<AskResponseDto>> Ask([FromBody] AskRequest request, CancellationToken ct)
     {
-        var answer = await _mediator.Send(new AskQuestionQuery(request.Question, request.DocumentId, _chatOptions.ContextTopK), ct);
+        var answer = await _mediator.Send(new AskQuestionQuery(request.Question, request.DocumentId, _chatOptions.ContextTopK, _chatOptions.SourceContextHeader), ct);
 
         return Ok(_mapper.Map<AskResponseDto>(answer));
     }

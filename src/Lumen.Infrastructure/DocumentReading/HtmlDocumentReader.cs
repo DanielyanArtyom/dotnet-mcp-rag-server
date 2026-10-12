@@ -5,6 +5,8 @@ namespace Lumen.Infrastructure.DocumentReading;
 
 public class HtmlDocumentReader : IDocumentReader
 {
+    public const int MaxSpan = 100;
+
     public async Task<List<DocumentElement>> ReadAsync(Stream fileStream, CancellationToken ct = default)
     {
         var context = BrowsingContext.New(Configuration.Default);
@@ -71,7 +73,7 @@ public class HtmlDocumentReader : IDocumentReader
         {
             var tableText = ExtractTableText(element);
             if (!string.IsNullOrWhiteSpace(tableText))
-                elements.Add(new DocumentElement { Type = ElementType.Table, Text = tableText });
+                elements.Add(new DocumentElement { Type = ElementType.Table, Text = tableText, Table = ExtractGrid(element) });
         }
         else if (tag.Length == 2 && tag[0] == 'h' && char.IsDigit(tag[1]))
         {
@@ -132,13 +134,18 @@ public class HtmlDocumentReader : IDocumentReader
         return sb.ToString();
     }
 
+    private static IEnumerable<IElement> OwnRows(IElement table) =>
+        table.QuerySelectorAll("tr").Where(r => r.Closest("table") == table);
+
+    private static IEnumerable<IElement> CellsOf(IElement row) =>
+        row.Children.Where(c => TagOf(c) is "td" or "th");
+
     private static string ExtractTableText(IElement table)
     {
         var lines = new List<string>();
-        foreach (var row in table.QuerySelectorAll("tr").Where(r => r.Closest("table") == table))
+        foreach (var row in OwnRows(table))
         {
-            var cells = row.Children
-                .Where(c => TagOf(c) is "td" or "th")
+            var cells = CellsOf(row)
                 .Select(cell => CleanText(InlineText(cell)))
                 .Where(text => text.Length > 0);
             var line = string.Join(" | ", cells);
@@ -147,6 +154,21 @@ public class HtmlDocumentReader : IDocumentReader
         }
         return string.Join("\n", lines);
     }
+
+    private static TableGrid ExtractGrid(IElement table) => new()
+    {
+        Rows = OwnRows(table)
+            .Select(row => new TableRow
+            {
+                Cells = CellsOf(row)
+                    .Select(cell => new TableCell { Text = CleanText(InlineText(cell)), ColSpan = SpanOf(cell, "colspan"), RowSpan = SpanOf(cell, "rowspan") })
+                    .ToList()
+            })
+            .ToList()
+    };
+
+    private static int SpanOf(IElement cell, string attribute) =>
+        int.TryParse(cell.GetAttribute(attribute), out var span) && span > 0 ? Math.Min(span, MaxSpan) : 1;
 
     // AngleSharp has already decoded entities; \s also matches U+00A0.
     private static string CleanText(string raw) => Regex.Replace(raw, @"\s+", " ").Trim();

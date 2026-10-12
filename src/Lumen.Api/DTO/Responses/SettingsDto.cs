@@ -21,6 +21,7 @@ public class ChatSettingsDto
     public string? ReasoningEffort { get; set; }
     public int MaxOutputTokens { get; set; }
     public int ContextTopK { get; set; }
+    public bool SourceContextHeader { get; set; }
 }
 
 public class EmbeddingSettingsDto
@@ -33,6 +34,10 @@ public class ChunkingSettingsDto
 {
     public int MaxTokensPerChunk { get; set; }
     public int OverlapTokens { get; set; }
+    public bool TableCells { get; set; }
+    public bool TableHeaders { get; set; }
+    public bool TableCaptions { get; set; }
+    public string TableFormat { get; set; } = default!;
 }
 
 public class SearchSettingsDto

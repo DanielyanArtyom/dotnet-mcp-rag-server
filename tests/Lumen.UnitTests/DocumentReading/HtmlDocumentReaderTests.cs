@@ -129,4 +129,65 @@ public class HtmlDocumentReaderTests
 
         Assert.Equal("Real", Assert.Single(elements).Text);
     }
+
+    [Fact]
+    public async Task ReadAsync_keeps_the_table_grid_with_spans_and_empty_cells()
+    {
+        const string html = """
+            <html><body><table>
+              <tr><td></td><td colspan="3">2025</td></tr>
+              <tr><td rowspan="2">Products</td><td>$</td><td>112,887</td><td></td></tr>
+              <tr><td>%</td></tr>
+            </table></body></html>
+            """;
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(html));
+
+        var table = Assert.Single(await new HtmlDocumentReader().ReadAsync(stream));
+
+        Assert.NotNull(table.Table);
+        Assert.Equal(3, table.Table!.Rows.Count);
+        Assert.Equal(["", "2025"], table.Table.Rows[0].Cells.Select(c => c.Text));
+        Assert.Equal(3, table.Table.Rows[0].Cells[1].ColSpan);
+        Assert.Equal(2, table.Table.Rows[1].Cells[0].RowSpan);
+        Assert.Equal(4, table.Table.Rows[1].Cells.Count);
+    }
+
+    [Fact]
+    public async Task ReadAsync_leaves_the_table_text_unchanged()
+    {
+        const string html = "<html><body><table><tr><td></td><td colspan=\"3\">2025</td></tr><tr><td>Products</td><td>$</td><td>112,887</td><td></td></tr></table></body></html>";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(html));
+
+        var table = Assert.Single(await new HtmlDocumentReader().ReadAsync(stream));
+
+        Assert.Equal("2025\nProducts | $ | 112,887", table.Text);
+    }
+
+    [Theory]
+    [InlineData("0", 1)]
+    [InlineData("-3", 1)]
+    [InlineData("abc", 1)]
+    [InlineData("99999", HtmlDocumentReader.MaxSpan)]
+    [InlineData("4", 4)]
+    public async Task ReadAsync_clamps_span_attributes(string attribute, int expected)
+    {
+        var html = $"<html><body><table><tr><td colspan=\"{attribute}\" rowspan=\"{attribute}\">A</td><td>1</td></tr></table></body></html>";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(html));
+
+        var cell = Assert.Single(await new HtmlDocumentReader().ReadAsync(stream)).Table!.Rows[0].Cells[0];
+
+        Assert.Equal(expected, cell.ColSpan);
+        Assert.Equal(expected, cell.RowSpan);
+    }
+
+    [Fact]
+    public async Task ReadAsync_does_not_take_rows_of_a_nested_table_into_the_outer_grid()
+    {
+        const string html = "<html><body><table><tr><td>Outer</td><td><table><tr><td>Inner</td></tr></table></td></tr></table></body></html>";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(html));
+
+        var outer = (await new HtmlDocumentReader().ReadAsync(stream))[0];
+
+        Assert.Single(outer.Table!.Rows);
+    }
 }

@@ -2,13 +2,14 @@ namespace Lumen.UnitTests.Ask;
 
 public class RagPromptTests
 {
-    private static ChunkSearchResult Chunk(string text, ChunkType type = ChunkType.Prose, string title = "Apple 10-K") => new()
+    private static ChunkSearchResult Chunk(string text, ChunkType type = ChunkType.Prose, string title = "Apple 10-K", string? contextHeader = null) => new()
     {
         ChunkId = Guid.NewGuid(),
         DocumentId = Guid.NewGuid(),
         DocumentTitle = title,
         DocumentFilingDate = new DateOnly(2025, 9, 27),
         ChunkType = type,
+        ContextHeader = contextHeader,
         Text = text
     };
 
@@ -77,7 +78,7 @@ public class RagPromptTests
 
     [Fact]
     public void Hash_is_stable_and_short() =>
-        Assert.Matches("^[0-9a-f]{12}$", RagPrompt.Hash);
+        Assert.Matches("^[0-9a-f]{12}$", RagPrompt.HashFor(false));
 
     [Fact]
     public void Hash_covers_the_user_message_template() =>
@@ -92,5 +93,28 @@ public class RagPromptTests
         }
 
         return count;
+    }
+
+    [Fact]
+    public void Adds_the_context_header_as_an_escaped_attribute_when_asked()
+    {
+        var message = RagPrompt.BuildUserMessage("q", [Chunk("text", contextHeader: "Apple 10-K (filed 2025-10-31) — \"Gross Margin\"")], sourceContextHeader: true);
+
+        Assert.Contains("kind=\"prose\" context=\"Apple 10-K (filed 2025-10-31) — &quot;Gross Margin&quot;\">", message);
+    }
+
+    [Fact]
+    public void Omits_the_attribute_when_off_or_when_the_chunk_has_no_header()
+    {
+        Assert.DoesNotContain("context=", RagPrompt.BuildUserMessage("q", [Chunk("text", contextHeader: "Header")]));
+        Assert.DoesNotContain("context=", RagPrompt.BuildUserMessage("q", [Chunk("text")], sourceContextHeader: true));
+    }
+
+    [Fact]
+    public void The_hash_without_the_context_header_is_unchanged_and_differs_with_it()
+    {
+        Assert.Equal("ae0bb62cae85", RagPrompt.HashFor(false));
+        Assert.Matches("^[0-9a-f]{12}$", RagPrompt.HashFor(true));
+        Assert.NotEqual(RagPrompt.HashFor(false), RagPrompt.HashFor(true));
     }
 }
