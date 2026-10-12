@@ -4,7 +4,7 @@ namespace Lumen.IntegrationTests.Persistence;
 public class DbSeederTests(PostgresFixture fixture)
 {
     [Fact]
-    public async Task SeedAsync_creates_two_tenants_with_one_admin_and_one_document_each_and_is_idempotent()
+    public async Task SeedAsync_creates_two_tenants_with_one_admin_each_and_no_documents_and_is_idempotent()
     {
         var options = TestDbContextFactory.BuildOptions(fixture.ConnectionString);
         var currentTenant = new CurrentTenant();
@@ -22,7 +22,7 @@ public class DbSeederTests(PostgresFixture fixture)
         Assert.Equal(1, await verify.Tenants.CountAsync(t => t.Name == "Globex Inc"));
         Assert.Equal(1, await verify.Users.IgnoreQueryFilters().CountAsync(u => u.Email == "admin@acme.test"));
         Assert.Equal(1, await verify.Users.IgnoreQueryFilters().CountAsync(u => u.Email == "admin@globex.test"));
-        Assert.Equal(1, await verify.Documents.IgnoreQueryFilters().CountAsync(d => d.Title == "Welcome to Acme"));
-        Assert.Equal(1, await verify.Documents.IgnoreQueryFilters().CountAsync(d => d.Title == "Welcome to Globex"));
+        var tenantIds = await verify.Tenants.Where(t => t.Name == "Acme Corp" || t.Name == "Globex Inc").Select(t => t.Id).ToListAsync();
+        Assert.Equal(0, await verify.Documents.IgnoreQueryFilters().CountAsync(d => tenantIds.Contains(d.TenantId)));
     }
 }

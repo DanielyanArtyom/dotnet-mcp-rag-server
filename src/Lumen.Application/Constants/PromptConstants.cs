@@ -17,6 +17,8 @@ public static class PromptConstants
     public const string RulesReminder =
         $"Answer only from the sources above and cite them as [n]. If they do not contain the answer, reply exactly: {RefusalSentence}";
 
-    // Bump when the format built by RagPrompt.BuildUserMessage changes; it is part of RagPrompt.Hash so eval runs stay comparable.
+    // Bump when the format built by RagPrompt.BuildUserMessage changes; it is part of RagPrompt.HashFor so eval runs stay comparable.
+    // v1 is the plain source tag; v2 adds the context attribute (Chat:SourceContextHeader).
     public const string UserTemplateVersion = "sources-xml-v1";
+    public const string UserTemplateVersionWithContext = "sources-xml-v2";
 }

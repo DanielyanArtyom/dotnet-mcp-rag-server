@@ -29,6 +29,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Lumen.IntegrationTests\Fixtures\apple-10k-fy2025.htm" Link="Fixtures\apple-10k-fy2025.htm" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Lumen.Api\Lumen.Api.csproj" />
     <ProjectReference Include="..\..\src\Lumen.Application\Lumen.Application.csproj" />
     <ProjectReference Include="..\..\src\Lumen.Infrastructure\Lumen.Infrastructure.csproj" />

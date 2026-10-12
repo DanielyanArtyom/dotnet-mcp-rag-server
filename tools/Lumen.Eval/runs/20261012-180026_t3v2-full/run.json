@@ -1,0 +1,94 @@
+{
+  "label": "t3v2-full",
+  "mode": "full",
+  "startedAt": "2026-10-12T18:00:26.779333+04:00",
+  "gitCommit": "c009696-dirty",
+  "evalSetPath": "eval-set.json",
+  "evalSetSha256": "84fb374ca5f0f11739e4b5186e79b33be3ccdfad3f8c596853d587798a4a5367",
+  "repeat": 1,
+  "holdout": false,
+  "serverSettings": {
+    "chat": {
+      "provider": "AzureOpenAI",
+      "deployment": "gpt-4o",
+      "temperature": 0.2,
+      "topP": null,
+      "reasoningEffort": null,
+      "maxOutputTokens": 1024,
+      "contextTopK": 10,
+      "sourceContextHeader": false
+    },
+    "embeddings": {
+      "provider": "AzureOpenAI",
+      "model": "text-embedding-3-small"
+    },
+    "chunking": {
+      "maxTokensPerChunk": 250,
+      "overlapTokens": 60,
+      "tableCells": true,
+      "tableHeaders": true,
+      "tableCaptions": true,
+      "tableFormat": "KeyValue"
+    },
+    "searchMode": "vector",
+    "search": {
+      "mode": "vector",
+      "rrfK": 60,
+      "candidates": 50,
+      "lexicalWeight": 1,
+      "vectorWeight": 1,
+      "maxChunksPerDocument": null
+    },
+    "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1;cells=v2;thdr=v2;tcap=v2;tser=kv2",
+    "promptHash": "ae0bb62cae85",
+    "mcp": {
+      "contextTool": false
+    }
+  },
+  "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1;cells=v2;thdr=v2;tcap=v2;tser=kv2",
+  "corpus": [
+    {
+      "tenant": "acme",
+      "title": "Apple 10-K",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1;cells=v2;thdr=v2;tcap=v2;tser=kv2",
+      "chunkCount": 473
+    },
+    {
+      "tenant": "acme",
+      "title": "Apple 10-Q",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1;cells=v2;thdr=v2;tcap=v2;tser=kv2",
+      "chunkCount": 269
+    },
+    {
+      "tenant": "globex",
+      "title": "Morgan 10-K",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1;cells=v2;thdr=v2;tcap=v2;tser=kv2",
+      "chunkCount": 3166
+    },
+    {
+      "tenant": "globex",
+      "title": "Morgan 10-Q",
+      "ingestProfile": "chunk=250/60;hdr=v1;merge=0;dec=v1;cells=v2;thdr=v2;tcap=v2;tser=kv2",
+      "chunkCount": 2280
+    }
+  ],
+  "unlabelable": [
+    "g-dimon-10b5-1"
+  ],
+  "broadAnchors": {
+    "g-net-income-2025": 14,
+    "g-cet1-2025": 8,
+    "g-nii-6m-26": 7,
+    "g-apple-card-what": 6,
+    "g-apple-card-allowance": 11,
+    "g-tbvps-delta": 6
+  },
+  "judgeDeployment": "gpt-5-mini",
+  "judgeInputTokens": 1180,
+  "judgeOutputTokens": 778,
+  "abortReason": null,
+  "agentModel": null,
+  "agentConfiguredModel": null,
+  "agentCliVersion": null,
+  "agentRulesHash": null
+}

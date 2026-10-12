@@ -461,6 +461,115 @@
       "note": "10-Q table, six-month column; quarter figure 25,511 is the distractor"
     },
     {
+      "id": "g-nco-rate-q2-26",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "What was JPMorgan Chase's net charge-off rate for the second quarter of 2026?",
+      "expected": {
+        "kind": "number",
+        "value": 0.66,
+        "unit": "percent"
+      },
+      "anchors": [
+        [
+          "Net charge-off rate",
+          "0.66",
+          "0.67",
+          "0.72"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-Q Consolidated financial highlights, continuation chunk (Stage 6B)"
+    },
+    {
+      "id": "g-employees-q2-26",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "How many employees did JPMorgan Chase have at June 30, 2026?",
+      "expected": {
+        "kind": "number",
+        "value": 320560
+      },
+      "anchors": [
+        [
+          "Employees",
+          "320,560"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-Q Consolidated financial highlights, continuation chunk (Stage 6B)"
+    },
+    {
+      "id": "g-slr-q2-26",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "What was JPMorgan Chase's supplementary leverage ratio at June 30, 2026?",
+      "expected": {
+        "kind": "number",
+        "value": 5.5,
+        "unit": "percent"
+      },
+      "anchors": [
+        [
+          "Supplementary leverage ratio",
+          "5.5",
+          "5.6",
+          "5.8"
+        ],
+        [
+          "SLR was 5.5%"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-Q highlights continuation chunk + Executive Overview prose (Stage 6B)"
+    },
+    {
+      "id": "g-alll-ratio-2025",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "What was JPMorgan Chase's allowance for loan losses to total retained loans ratio at December 31, 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 1.83,
+        "unit": "percent"
+      },
+      "anchors": [
+        [
+          "Allowance for loan losses to total retained loans",
+          "1.83",
+          "1.87"
+        ],
+        [
+          "coverage ratio of 1.83%"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K highlights continuation chunk + credit prose (Stage 6B)"
+    },
+    {
+      "id": "g-ccb-employees-2025",
+      "tenant": "globex",
+      "category": "table-value",
+      "question": "How many employees did JPMorgan Chase's Consumer & Community Banking segment have at December 31, 2025?",
+      "expected": {
+        "kind": "number",
+        "value": 144196
+      },
+      "anchors": [
+        [
+          "Employees",
+          "144,196",
+          "144,989"
+        ],
+        [
+          "CCB",
+          "144,196"
+        ]
+      ],
+      "holdout": false,
+      "note": "10-K CCB selected metrics continuation chunk + employee breakdown table (Stage 6B)"
+    },
+    {
       "id": "g-apple-card-what",
       "tenant": "globex",
       "category": "prose",

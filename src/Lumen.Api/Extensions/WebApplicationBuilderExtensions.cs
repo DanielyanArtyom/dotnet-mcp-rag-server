@@ -9,7 +9,12 @@ public static class WebApplicationBuilderExtensions
 {
     public static WebApplicationBuilder Configure(this WebApplicationBuilder builder)
     {
-        builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtClaimConstants.SectionName));
+        builder.Services.AddOptions<JwtOptions>()
+            .Bind(builder.Configuration.GetSection(JwtClaimConstants.SectionName))
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
+        builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection(DatabaseOptions.SectionName));
+        builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOptions.SectionName));
         builder.Services.Configure<FileStorageOptions>(builder.Configuration.GetSection(FileStorageOptions.SectionName));
         builder.Services.PostConfigure<FileStorageOptions>(o =>
         {
@@ -38,7 +43,11 @@ public static class WebApplicationBuilderExtensions
         builder.Services.AddSingleton<IValidateOptions<McpOptions>, McpOptionsValidator>();
 
         builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(builder.Configuration.GetConnectionString("Default"), o => o.UseVector()));
+            options.UseNpgsql(
+                builder.Configuration.GetConnectionString("Default") is { Length: > 0 } connectionString
+                    ? connectionString
+                    : throw new InvalidOperationException("ConnectionStrings:Default is not set; set it with the ConnectionStrings__Default environment variable."),
+                o => o.UseVector()));
 
         builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(LoginCommand).Assembly));
 
@@ -58,8 +67,10 @@ public static class WebApplicationBuilderExtensions
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
 
+        builder.Services.AddScoped<DemoFilingSeeder>();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         builder.Services.AddProblemDetails();
+        builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>(tags: [HealthConstants.ReadyTag]);
 
         return builder;
     }
@@ -73,7 +84,12 @@ public static class WebApplicationBuilderExtensions
 
     public static WebApplicationBuilder AddAuthentication(this WebApplicationBuilder builder)
     {
-        var jwtOptions = builder.Configuration.GetSection(JwtClaimConstants.SectionName).Get<JwtOptions>()!;
+        var jwtOptions = builder.Configuration.GetSection(JwtClaimConstants.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+        var validation = new JwtOptionsValidator().Validate(null, jwtOptions);
+        if (validation.Failed)
+        {
+            throw new OptionsValidationException(JwtClaimConstants.SectionName, typeof(JwtOptions), validation.Failures!);
+        }
 
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>

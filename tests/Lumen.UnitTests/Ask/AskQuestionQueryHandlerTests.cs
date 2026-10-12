@@ -47,6 +47,21 @@ public class AskQuestionQueryHandlerTests
     }
 
     [Fact]
+    public async Task Sends_the_context_header_to_the_model_when_the_switch_is_on()
+    {
+        _chunks.Setup(r => r.SearchAsync(It.IsAny<float[]>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ChunkSearchResult
+            {
+                ChunkId = Guid.NewGuid(), DocumentId = Guid.NewGuid(), DocumentTitle = "Apple 10-K", DocumentFilingDate = new DateOnly(2023, 10, 27),
+                TokenCount = 50, Text = "text", ContextHeader = "H", Distance = 0.1
+            }]);
+
+        await CreateHandler().Handle(new AskQuestionQuery("q", null, 5, SourceContextHeader: true), CancellationToken.None);
+
+        _chat.Verify(c => c.CompleteAsync(PromptConstants.SystemPrompt, It.Is<string>(u => u.Contains("context=\"H\"")), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Refuses_without_calling_the_model_when_nothing_is_retrieved()
     {
         Found();

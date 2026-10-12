@@ -21,6 +21,16 @@ public class ChunkingOptionsValidator : IValidateOptions<ChunkingOptions>
             failures.Add("Chunking:MergeBelowTokens must be at least 0 (0 = off) and smaller than MaxTokensPerChunk.");
         }
 
+        if (options.TableHeaders && !options.TableCells)
+        {
+            failures.Add("Chunking:TableHeaders requires Chunking:TableCells.");
+        }
+
+        if (options.TableFormat == TableFormat.KeyValue && !options.TableCells)
+        {
+            failures.Add("Chunking:TableFormat=KeyValue requires Chunking:TableCells.");
+        }
+
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 }

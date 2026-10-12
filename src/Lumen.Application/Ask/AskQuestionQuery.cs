@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Lumen.Application.Ask;
 
-public record AskQuestionQuery(string Question, Guid? DocumentId, int TopK) : IRequest<AskAnswer>;
+public record AskQuestionQuery(string Question, Guid? DocumentId, int TopK, bool SourceContextHeader = false) : IRequest<AskAnswer>;
 
 public class AskQuestionQueryHandler : IRequestHandler<AskQuestionQuery, AskAnswer>
 {
@@ -40,7 +40,7 @@ public class AskQuestionQueryHandler : IRequestHandler<AskQuestionQuery, AskAnsw
         _logger.LogInformation("Retrieved {Count} chunks for /api/ask; top-1 distance {Distance:F4}", found.Count, found[0].Distance);
 
         var generation = Stopwatch.StartNew();
-        var generated = await GenerateAsync(request.Question, found, ct);
+        var generated = await GenerateAsync(request.Question, found, request.SourceContextHeader, ct);
         var generationMs = generation.ElapsedMilliseconds;
 
         var cited = ParseCitations(generated.Text, found.Count);
@@ -88,12 +88,12 @@ public class AskQuestionQueryHandler : IRequestHandler<AskQuestionQuery, AskAnsw
         return await _chunks.SearchAsync(vectors[0], request.Question, _embeddings.ModelName, request.TopK, request.DocumentId, ct);
     }
 
-    private async Task<GeneratedAnswer> GenerateAsync(string question, IReadOnlyList<ChunkSearchResult> sources, CancellationToken ct)
+    private async Task<GeneratedAnswer> GenerateAsync(string question, IReadOnlyList<ChunkSearchResult> sources, bool sourceContextHeader, CancellationToken ct)
     {
         GeneratedAnswer generated;
         try
         {
-            generated = await _chat.CompleteAsync(PromptConstants.SystemPrompt, RagPrompt.BuildUserMessage(question, sources), ct);
+            generated = await _chat.CompleteAsync(PromptConstants.SystemPrompt, RagPrompt.BuildUserMessage(question, sources, sourceContextHeader), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

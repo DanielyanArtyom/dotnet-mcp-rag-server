@@ -1,0 +1,8 @@
+{
+  "filings": [
+    { "tenant": "Acme Corp", "title": "Apple 10-K", "filingDate": "2025-09-27", "file": "aapl-20250927.html" },
+    { "tenant": "Acme Corp", "title": "Apple 10-Q", "filingDate": "2026-06-27", "file": "aapl-20260627.html" },
+    { "tenant": "Globex Inc", "title": "Morgan 10-K", "filingDate": "2025-12-31", "file": "jpm-20251231.html" },
+    { "tenant": "Globex Inc", "title": "Morgan 10-Q", "filingDate": "2026-06-30", "file": "jpm-20260630.html" }
+  ]
+}

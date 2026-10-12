@@ -13,4 +13,5 @@ public class ChatSettingsOptions
     public ReasoningEffort? ReasoningEffort { get; set; }
     public int MaxOutputTokens { get; set; } = 1024;
     public int ContextTopK { get; set; } = 5;
+    public bool SourceContextHeader { get; set; }
 }
