@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "lumen": {
+      "type": "http",
+      "url": "http://localhost:5219/mcp",
+      "headersHelper": "LUMEN_URL=http://localhost:5219 LUMEN_EMAIL=admin@acme.test LUMEN_PASSWORD='Passw0rd!' __REPO__/tools/mcp/lumen-token.sh"
+    }
+  }
+}

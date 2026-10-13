@@ -22,6 +22,45 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 <!-- Entries go below, by stage. Only real decisions with real numbers — no examples or placeholders. -->
 
+## Index
+
+**Before Stage 1 / Stage 1 — skeleton**
+- [PostgreSQL + pgvector instead of SQL Server 2025](#2026-09-09-postgresql--pgvector-instead-of-sql-server-2025) — pgvector's HNSW is GA while SQL Server's ANN index was preview; native arm64 image
+- [Exactly one legal `.IgnoreQueryFilters()`](#2026-09-10-tenant-isolation-via-an-ef-core-global-query-filter--exactly-one-legal-ignorequeryfilters) — 1 call site, 2 independent isolation tests
+
+**Stage 2 — ingest & chunking**
+- [Atomic table chunks, prose at 250/60 tokens](#2026-09-18-tables-from-a-filing-become-atomic-chunks-prose-is-split-by-a-25060-token-budget) — 29 % of chunks are tables a fixed splitter would cut mid-row
+
+**Stage 3 — embeddings & search**
+- [Azure OpenAI via the plain `OpenAI` package and the v1 API](#2026-09-20-azure-openai-through-the-plain-openai-package-and-the-v1-api-without-azureaiopenai) — avoids 12 minor versions of assembly skew
+- [Vector search as raw SQL with an explicit tenant predicate](#2026-09-20-vector-search-is-raw-sql-with-an-explicit-tenant-predicate-isolation-is-proven-by-a-test-with-a-negative-control) — a negative control shows the same SQL leaks without the predicate
+
+**Stage 4 — RAG & eval-driven tuning**
+- [`gpt-4o` answers, `gpt-5-mini` judges](#2026-10-05-models-for-apiask-gpt-4o-answers-gpt-5-mini-judges--chosen-by-quota-not-quality) — chosen by quota: 0 TPM on every newer model except `gpt-5-mini`
+- [Ingest profile stored on every document](#2026-10-06-chunking-parameters-are-stored-on-the-document-ingest-profile-the-harness-checks-the-corpus-before-a-run) — a mixed corpus had pushed hit@5 down to 52 % (71 % once re-chunked)
+- [Per-document chunk cap off](#2026-10-07-the-at-most-3-chunks-per-document-cap-is-turned-off) — accuracy 70 % → 63 %, MRR worse at p = 0.033
+- [10 sources instead of 5](#2026-10-07-context-for-the-model-10-chunks-instead-of-5-chatcontexttopk--10) — accuracy 70 % → 83 %, 4:0 flips
+- [Hybrid search off](#2026-10-07-hybrid-search-postgres-fts--rrf-stays-off--it-bought-nothing-on-this-corpus) — 3:3 flips, p = 1.0
+- [Short-chunk merging off](#2026-10-07-short-chunk-merging-mergebelowtokens-stays-off) — 1:1 flips
+- [Context headers on](#2026-10-07-a-context-header-on-every-chunk-stays-on-chunkingcontextheaders--true) — hit@10 67 % → 92 %
+- [Decimal-safe chunking on](#2026-10-07-whole-decimal-numbers-during-chunking-stay-on-chunkingprotectdecimals--true) — the only significant gain, MRR p = 0.0085
+- [Temperature is not a lever](#2026-10-07-temperature-02-is-not-a-quality-lever-on-this-task-e5) — 87 % at 0, 0.2 and 0.6
+- [Prompt and exact search left alone](#2026-10-07-the-prompt-and-the-vector-index-stay-as-they-are-e6-e7-not-needed) — 0 % false answers in 15 runs; exact search ~300 ms
+
+**Stage 5 — MCP**
+- [Stateless transport, required for isolation](#2026-10-11-the-mcp-servers-transport-is-stateless-because-tenant-isolation-depends-on-it) — stateful mode saw an empty tenant
+- [Search-only tools, no `ask`](#2026-10-11-mcp-exposes-search-only-no-server-side-ask-tool) — 87 % = 87 %, at ~9× the cost
+- [`get_chunk_context` off](#2026-10-11-the-neighbour-chunk-tool-get_chunk_context-stays-switched-off) — 0 calls in 30 questions
+- [Existing JWT + token helper, not OAuth](#2026-10-11-mcp-clients-authenticate-with-the-existing-jwt-through-a-token-helper-not-oauth) — zero new auth code; 401 → helper → retry verified
+- [Isolated agent eval](#2026-10-11-agent-evaluation-runs-the-client-in-an-isolated-configuration) — 40 % → 87 % once the user's own settings were kept out
+
+**Stage 6 — run anywhere & tables**
+- [Split tables keep header, row group and caption](#2026-10-12-split-tables-keep-their-header-row-group-and-caption-tablecells-tableheaders-tablecaptions--true) — accuracy 77 % → 80 %, hit@3 52 % → 62 %
+- [Key-value table format off](#2026-10-12-the-key-value-table-format-stays-off-tableformat--pipe) — 0:1 flips, +58 % 10-Q chunks
+- [No context header in the `/api/ask` prompt](#2026-10-12-the-context-header-is-not-added-to-the-apiask-prompt-chatsourcecontextheader--false) — 0:0 flips
+- [`aspnet:10.0-noble-chiseled-extra`, non-root](#2026-10-12-the-container-runs-on-aspnet100-noble-chiseled-extra-non-root) — 202 MB vs 294 MB
+- [Migrate and seed at startup behind flags](#2026-10-12-migrations-and-demo-seeding-run-at-startup-behind-flags-not-as-a-separate-migration-job) — cold start 7.5 s, warm 1.2 s
+
 ## 2026-09-09 PostgreSQL + pgvector instead of SQL Server 2025
 
 **Context:** before Stage 1 we needed one database for both the tenants' relational data and the vectors. For a .NET project the natural candidate is SQL Server 2025 with its native `VECTOR` type. Development happens on an Apple Silicon Mac in Docker; the deployment target is Azure.
@@ -32,7 +71,7 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Why:** as of 2026-09-09, SQL Server 2025 had exact search (`VECTOR_DISTANCE`) GA, but its ANN index (`CREATE VECTOR INDEX`, DiskANN) and `VECTOR_SEARCH` were still preview behind the `PREVIEW_FEATURES` flag (Microsoft docs updated 2026-08-25), with a 1,998-dimension limit. Its Docker image is x86-64 only, and the RTM image crashes under emulation on Apple Silicon (`x86_avx_state_ptr` assertion); a CU1 fix is reported only by a third-party blog. pgvector is a stable v0.8.6 with HNSW/IVFFlat GA (not preview), and `pgvector/pgvector:pg17` runs natively on arm64. What the project needs to show — raw SQL that bypasses EF Core's global filter, with an isolation test on top — works equally well on both, so the deciding factor was operational, not capability.
 
-**Would revisit when:** DiskANN indexing in SQL Server goes GA and a native arm64 image ships, or the project needs to be shown on a ".NET + SQL Server" stack (e.g. Azure SQL Database instead of Azure Database for PostgreSQL in Stage 6).
+**Would revisit when:** DiskANN indexing in SQL Server goes GA and a native arm64 image ships, or the project needs to be shown on a ".NET + SQL Server" stack (e.g. Azure SQL Database instead of Azure Database for PostgreSQL in a real Azure deploy).
 
 ## 2026-09-10 Tenant isolation via an EF Core global query filter + exactly one legal `.IgnoreQueryFilters()`
 
@@ -40,9 +79,9 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Options:** (a) allow `.IgnoreQueryFilters()` anywhere the code needs to bypass the filter; (b) restrict it to exactly one call site — `UserLookupService.FindByEmailAcrossTenantsAsync` — with an explicit justifying comment, and forbid it everywhere else.
 
-**Decision:** (b). The restriction was checked with grep on every task from Task 9 (where the first legal call appeared) through Task 13.
+**Decision:** (b). The restriction was checked with grep at every remaining step of Stage 1, from the moment the first legal call appeared.
 
-**Why:** a narrow whitelist makes an isolation breach visible in code review instead of dissolving into the rest of the code. Proven by 2 independent tests: `TenantIsolationDbContextTests` (EF level, `AppDbContext` directly, Task 3) and `DocumentTenantIsolationTests` (full HTTP flow — real JWTs from the actual `POST /api/auth/token`, real HTTP requests through `WebApplicationFactory`, Task 13). Final Stage 1 run: 23/23 tests green (11 unit + 12 integration), exactly 1 (one) legal `.IgnoreQueryFilters()` in the whole codebase. Also enforced at the schema level: `Documents.TenantId`/`Users.TenantId` are now real foreign keys to `Tenants.Id` (not just indexes), and `AppDbContext.SaveChanges` unconditionally overwrites `TenantId` on new tenant-owned rows with the current tenant — a client-supplied value can never win (see `TenantScopedWriter` for legitimate writes on behalf of a specific tenant outside the normal request flow, such as seed data).
+**Why:** a narrow whitelist makes an isolation breach visible in code review. Final Stage 1 run: 23/23 tests green (11 unit + 12 integration), exactly 1 legal `.IgnoreQueryFilters()` in the codebase, proven by 2 independent tests: `TenantIsolationDbContextTests` (EF level, `AppDbContext` directly) and `DocumentTenantIsolationTests` (full HTTP flow with real JWTs from `POST /api/auth/token`). The schema backs it up: `Documents.TenantId`/`Users.TenantId` are real foreign keys to `Tenants.Id`, and `AppDbContext.SaveChanges` always overwrites `TenantId` on new tenant-owned rows with the current tenant, so a client-supplied value never wins (`TenantScopedWriter` covers legitimate writes outside a request, such as seed data).
 
 **Would revisit when:** a second legitimate cross-tenant scenario appears (for example, a superadmin panel in a later stage) — then add a second explicit, equally narrowly documented call site rather than loosening the rule as a whole.
 
@@ -66,7 +105,7 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Decision:** (c). One package for the whole stack: embeddings in Stage 3, the chat client for `/api/ask` and the LLM judge in the eval harness in Stage 4.
 
-**Why:** `Microsoft.Extensions.AI.OpenAI` 10.10.0 requires `OpenAI >= 2.13.0`, while `Azure.AI.OpenAI` 2.1.0 (2024-12-06) was built against `OpenAI` 2.1.0. Option (a) would mean running the Azure client on top of an assembly 12 minor versions newer than the one it was compiled against; option (b) means a beta package in the dependency graph. The v1 API was verified live: `text-embedding-3-small` embeddings, and later `gpt-4o` and `gpt-5-mini` chat, work on an AI Foundry resource (`*.services.ai.azure.com/openai/v1/`), not only on `*.openai.azure.com`. Microsoft Entra ID authentication (`BearerTokenPolicy` + `DefaultAzureCredential`) lives in the same client — a ready base for managed identity in Stage 6.
+**Why:** `Microsoft.Extensions.AI.OpenAI` 10.10.0 requires `OpenAI >= 2.13.0`, while `Azure.AI.OpenAI` 2.1.0 (2024-12-06) was built against `OpenAI` 2.1.0. Option (a) would mean running the Azure client on top of an assembly 12 minor versions newer than the one it was compiled against; option (b) means a beta package in the dependency graph. The v1 API was verified live: `text-embedding-3-small` embeddings, and later `gpt-4o` and `gpt-5-mini` chat, work on an AI Foundry resource (`*.services.ai.azure.com/openai/v1/`), not only on `*.openai.azure.com`. Microsoft Entra ID authentication (`BearerTokenPolicy` + `DefaultAzureCredential`) lives in the same client — a ready base for managed identity in a real Azure deploy.
 
 **Would revisit when:** a needed Azure feature is missing from the v1 API's GA subset (e.g. "On Your Data" or deployment-specific parameters), or `Azure.AI.OpenAI` ships a stable release on a current `OpenAI`.
 
@@ -78,7 +117,7 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Decision:** (b). The tenant predicate comes before `ORDER BY … LIMIT` (`WHERE c."TenantId" = @tenantId`) and again in `JOIN "Documents" d … AND d."TenantId" = @tenantId`; in Stage 4b's hybrid mode it is repeated in every CTE. RLS was not added: it would be a second, parallel isolation mechanism, while the EF Core filter already covers everything else.
 
-**Why:** a "one query bypasses the filter" rule can only be enforced by a test, so the isolation tests are a required deliverable. There are now 11 of them in 8 classes at five levels: EF Core, HTTP with real JWTs, raw vector SQL, hybrid SQL and `/api/ask` (another tenant's chunks never reach the model). The key test seeds identical chunk text into two tenants, and tenant B's search never returns tenant A's rows. Its paired negative control runs the same query without the predicate and sees both tenants' rows — proving the isolation comes from the predicate, not from the table. `.IgnoreQueryFilters()` in all of `src/` is still exactly 1.
+**Why:** a "one query bypasses the filter" rule can only be enforced by a test, so the isolation tests are a required deliverable. At the time there were 11 of them in 8 classes at five levels (Stage 5 added MCP-level tests; see the README for the current count): EF Core, HTTP with real JWTs, raw vector SQL, hybrid SQL and `/api/ask` (another tenant's chunks never reach the model). The key test seeds identical chunk text into two tenants, and tenant B's search never returns tenant A's rows. Its paired negative control runs the same query without the predicate and sees both tenants' rows — proving the isolation comes from the predicate, not from the table. `.IgnoreQueryFilters()` in all of `src/` is still exactly 1.
 
 **Would revisit when:** an HNSW index arrives that filters after the scan (pgvector warns about this for multi-tenant tables) — then partition by tenant or use partial indexes. If raw queries grow beyond one or two — then RLS as a second barrier.
 
@@ -102,7 +141,7 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Decision:** (b). Every `Document` gets an `IngestProfile` string at upload (e.g. `chunk=250/60;hdr=v1;merge=0;dec=v1`). It is returned by `GET /api/documents`, and the current config's profile by `GET /api/settings`. The harness exits with code 1 on any mismatch, before the first question, and writes the corpus (tenant / document / profile / chunk count) into `run.json`. The same principle was already in place for embeddings since Stage 3: an `EmbeddingModel` column on every chunk + a model filter in the search SQL, plus all-or-nothing upload. Chunking had no equivalent, and that cost an invalid baseline.
 
-**Why:** after re-chunking the whole corpus under 250/60 (and uploading the missing JPM 10-Q), hit@5 went 52 % → 71 %, MRR 0.375 → 0.590, accuracy 57 % → 67 %. Caveat: three things changed at once (re-chunking, the extra document, three anchor fixes), so this is not a "400 vs 250" measurement but the cost of a mixed corpus. It was caught because the eval set is labelled with verbatim anchor phrases, not chunk ids. Anchors survive re-chunking (eval set `8a02fdeeef19` went through all 22 Stage 4b runs without a single edit — both on Apple 10-K's 296 chunks without headers and its 405 chunks with headers), and the anchor lint, built for re-chunking, worked as a "something is wrong with the corpus" detector. All 22 runs after the profile was introduced record the corpus and profile in `run.json`, with no mismatches.
+**Why:** after re-chunking the whole corpus under 250/60 (and uploading the missing JPM 10-Q), hit@5 went 52 % → 71 %, MRR 0.375 → 0.590, accuracy 57 % → 67 %. Three things changed at once (re-chunking, the extra document, three anchor fixes), so this is the cost of a mixed corpus, not a "400 vs 250" measurement. It was caught because the eval set is labelled with verbatim anchor phrases, not chunk ids. Anchors survive re-chunking (eval set `8a02fdeeef19` went through all 22 Stage 4b runs without an edit, on Apple 10-K's 296 chunks without headers and its 405 with them), so the anchor lint doubled as a "something is wrong with the corpus" detector. All 22 runs since record the corpus and profile in `run.json`, with no mismatches.
 
 **Would revisit when:** a reindex-from-stored-raw-file feature appears. Then the profile turns from a check into a trigger: a document with a stale profile could be re-chunked automatically instead of blocking the run.
 
@@ -150,7 +189,7 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Decision:** (a), `Chunking:MergeBelowTokens = 0`.
 
-**Why:** it solved the problem mechanically — on the Apple 10-K chunks ≤ 20 tokens went 7 → 0 (296 → 289 chunks) — but had no effect on quality: accuracy 67 % → 67 %, flips 1:1 (`a-gm-pct-fy25` ↔ `a-buyback-q3fy26`), McNemar p = 1.0; retrieval MRR 0.490 → 0.490 (p = 1.0). The footers turned out not to be the cause of misses — they were being pushed out anyway. Meanwhile merging alters the text of meaningful chunks (a stray footer gets appended to the end of a table) and adds one more ingest step to maintain. Confirmed by a control run of the final configuration (vector + headers + whole decimals, contextTopK=10): accuracy 87 % without hybrid and merging vs 83 % with them (E4), flips 2:1, p = 1.0; input tokens 56.8K vs 65.6K, p50 948 vs 1,414 ms.
+**Why:** it solved the problem mechanically — on the Apple 10-K chunks ≤ 20 tokens went 7 → 0 (296 → 289 chunks) — but had no effect on quality: accuracy 67 % → 67 %, flips 1:1 (`a-gm-pct-fy25` ↔ `a-buyback-q3fy26`), McNemar p = 1.0; retrieval MRR 0.490 → 0.490 (p = 1.0). The footers turned out not to be the cause of misses — they were being pushed out anyway. Meanwhile merging alters the text of meaningful chunks (a stray footer gets appended to the end of a table) and adds one more ingest step to maintain. The same control run as in the hybrid entry (87 % without hybrid and merging vs 83 % with them) confirms it.
 
 **Would revisit when:** documents arrive with many small fragments that really do take context slots (e.g. PDFs with tables split across pages).
 
@@ -162,7 +201,7 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Decision:** (b).
 
-**Why:** headers hurt the top of the ranking and improved recall: hit@1 46 % → 33 %, MRR 0.550 → 0.490 (p = 0.29), but hit@10 67 % → 92 % (the shared header makes a document's chunks resemble each other, so the right chunk is less often first but more often in the top ten). With 5 sources this gave nothing (accuracy 70 % → 67 %, 3:2, p = 1.0), but after moving to 10 sources top-10 recall became what the model actually sees: the final configuration (vector + headers + whole decimals, contextTopK=10) — accuracy 87 %, hit@5 83 %, hit@10 92 %, MRR 0.633, vs baseline b0 at 70 % (7:2, p = 0.18). There's no clean "10 sources without headers" measurement — the decision rests on the hit@10 gain, not an isolated effect on accuracy. Side note: ranking is sensitive to header text — fixing dates and one document title moved hit@10 by 9 points with no config change.
+**Why:** headers trade the top of the ranking for recall: hit@10 67 % → 92 %, but hit@1 46 % → 33 % and MRR 0.550 → 0.490 (p = 0.29), because a shared header makes a document's chunks resemble each other. With 5 sources that bought nothing (accuracy 70 % → 67 %, 3:2, p = 1.0); with 10 sources top-10 recall is what the model sees, and the final configuration (vector + headers + whole decimals, contextTopK=10) reached accuracy 87 %, hit@5 83 %, hit@10 92 %, MRR 0.633 vs baseline b0 at 70 % (7:2, p = 0.18). There is no clean "10 sources without headers" run, so the decision rests on the hit@10 gain, not an isolated effect on accuracy. Side note: fixing dates and one document title moved hit@10 by 9 points with no config change, so ranking is sensitive to header text.
 
 **Would revisit when:** after measuring contextTopK=10 without headers; if accuracy is no worse, remove them (fewer chunks, simpler ingest). Also worth trying a header for FTS only, or with only the section name, without date and document.
 
@@ -210,7 +249,7 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Decision:** (b), set explicitly (`SessionMode = Stateless`) with a comment that isolation depends on it.
 
-**Why:** reading the SDK source showed that only in stateless mode does a tool run inside the HTTP request's DI scope; in stateful mode each tool call gets a fresh scope from the root provider. Verified with the isolation test: switched to stateful, the tool saw an empty tenant, and the test's positive control (tenant B must find its own document) failed with an empty collection — while a negative-only test ("never returns tenant A's chunk") still passed. So it fails closed rather than leaking, but silently, and a test without a positive control would not notice. All MCP isolation tests now assert both directions. Stateless also needs no sticky sessions on App Service (Stage 6).
+**Why:** reading the SDK source showed that only in stateless mode does a tool run inside the HTTP request's DI scope; in stateful mode each tool call gets a fresh scope from the root provider. Verified with the isolation test: switched to stateful, the tool saw an empty tenant, and the test's positive control (tenant B must find its own document) failed with an empty collection — while a negative-only test ("never returns tenant A's chunk") still passed. So it fails closed rather than leaking, but silently, and a test without a positive control would not notice. All MCP isolation tests now assert both directions. Stateless also needs no sticky sessions behind a load balancer.
 
 **Would revisit when:** a feature needs server-to-client requests (sampling, elicitation) — then the tenant has to be re-resolved inside the tool from the request's claims instead of relying on the shared scope.
 
@@ -248,7 +287,7 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Why:** zero new auth code, and verified live: a helper that hands out an invalid token first makes Claude Code get a 401, re-run the helper and retry — the call succeeds with no user action. `tools/mcp/lumen-token.sh` logs in and prints the header. The cost shows when the header is missing: both Claude Code and MCP Inspector fall back to OAuth discovery and Dynamic Client Registration and get 404s. So the clients are ready for (c), and Claude Desktop / claude.ai — which need OAuth — stay unsupported. PATs (b) would add a token table and a second cross-tenant lookup (`IgnoreQueryFilters`) for a convenience the demo doesn't need.
 
-**Would revisit when:** real users have to connect (Stage 6 or later) — then OAuth 2.1 via Entra ID, which also opens Claude Desktop; PATs if users arrive before that.
+**Would revisit when:** real users have to connect — then OAuth 2.1 via Entra ID, which also opens Claude Desktop; PATs if users arrive before that.
 
 ## 2026-10-11 Agent evaluation runs the client in an isolated configuration
 
@@ -270,7 +309,7 @@ Entries are kept in chronological order, which is also stage order. Written in E
 
 **Decision:** D + A′ + B on by default; C stays off (next entry).
 
-**Why:** accuracy 77 % → 80 %, MRR 0.524 → 0.565, hit@3 52 % → 62 %, hit@1 45 % → 48 %, 0 % false answers. It fixes the Stage 4 failure `g-cet1-q2-26` (refused → correct) and a new continuation question (CCB employees: not retrieved → rank 2, correct), at a cost of +3–9 % chunks. **Not statistically significant:** 2 gained / 1 lost against the baseline (McNemar p = 1.0; n = 35 needs about 6:0). D alone was 2 lost / 0 gained, and both losses were rank swaps between near-identical headerless tables, not lost rows. Two costs are visible. A one-row continuation that now carries a long repeated header became too similar to its neighbours and dropped out of the top 10, the same effect the context header showed at Stage 4. Three of the five new questions are not retrieved at any setting. The measurement also caught a bug: a first chunk whose caption plus header overflowed the budget was repacked without its caption (2 such chunks per JPM filing, 63 under C). The fix brought this to 0 and left the ladder's metrics unchanged.
+**Why:** accuracy 77 % → 80 %, MRR 0.524 → 0.565, hit@3 52 % → 62 %, hit@1 45 % → 48 %, 0 % false answers, at +3–9 % chunks. It fixes the Stage 4 failure `g-cet1-q2-26` (refused → correct) and a new continuation question (CCB employees: not retrieved → rank 2, correct). **Not statistically significant:** 2 gained / 1 lost against the baseline (McNemar p = 1.0; n = 35 needs about 6:0). D alone was 2 lost / 0 gained, both rank swaps between near-identical headerless tables, not lost rows. Costs: a one-row continuation carrying a long repeated header became too similar to its neighbours and left the top 10 (the Stage 4 context-header effect again), and three of the five new questions are not retrieved at any setting. The measurement also caught a bug: a first chunk whose caption plus header overflowed the budget was repacked without its caption (2 such chunks per JPM filing, 63 under C); the fix brought this to 0 and left the ladder's metrics unchanged.
 
 **Would revisit when:** the eval set is large enough for significance. Also when a better header detector for text tables is built: a table whose first numeric row comes late (the Rule 10b5-1 table: `… | 200,000`) gets a 4-row "header", which is too big to repeat, so `g-dimon-10b5-1` (holdout) still refuses. That is a known limitation. Same for tables whose header lives in a separate `<table>` above (143 JPM 10-K tables; not built).
 

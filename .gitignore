@@ -26,5 +26,8 @@ App_Data/
 # Eval harness local overrides (judge API key)
 tools/Lumen.Eval/appsettings.Local.json
 
+# Media tooling dependencies
+tools/media/node_modules/
+
 # Local docker compose secrets (copy from .env.example)
 .env
