@@ -1,0 +1,244 @@
+# Stage 4a — кандидаты в eval-сет
+
+**Статус (2026-10-05):** пользователь отобрал и сверил 36 вопросов (отмечены `[x]`) → зафиксированы в `tools/Lumen.Eval/eval-set.json` (30 рабочих + 6 holdout). Неотмеченные остаются здесь как резерв.
+
+Составлено 2026-10-05 Claude по исходным HTML из `../../samples/edgar/` (Apple 10-K FY2025 и 10-Q Q3 FY2026 → тенант **acme**; JPMorgan 10-K 2025 и 10-Q Q2 2026 → тенант **globex**), **до** того, как система ответила хоть на один из этих вопросов. Машиночитаемая версия — [eval-candidates.json](eval-candidates.json) (формат `eval-set.json`).
+
+**Что сделать:** по каждому кандидату открыть filing и сверить эталон (число, период, единицы); пометить `[x]` оставить / вычеркнуть / поправить формулировку. Цель — ≈30 вопросов, из них ≈5 holdout. Скажи, какие id оставить, — я соберу `tools/Lumen.Eval/eval-set.json`.
+
+**Проверено скриптом:** каждая группа якорей дословно (после нормализации харнесса: регистр, пробелы, `|`, типографские кавычки/тире) встречается внутри одного абзаца или одной строки таблицы нужного filing'а — `0` «немаркируемых» на текущей разметке. Окончательно это проверит anchor lint на реальных чанках при первом прогоне.
+
+**Распределение:** 47 кандидатов — acme 24 / globex 23; значение из таблицы 14, проза 13, точный термин 6, сравнение 4, нет ответа 6, ловушка чужого тенанта 4. Предложенные holdout помечены 🔒.
+
+**На что смотреть при сверке:** (1) отвлекающие числа в том же чанке (прошлый год, nine-month vs three-month, Advanced vs Standardized) — записаны в заметках; (2) у вопросов на «сравнение» эталон вычислен, в тексте filing'а его нет; (3) «спад» хранится положительной величиной (`g-cet1-delta`); (4) у `a-dma-fine` сумма в евро — скоринг сравнивает только число.
+
+## acme (Apple)
+
+- [x] **`a-net-sales-fy25`** — значение из таблицы, сложность: easy
+  - Вопрос: What were Apple's total net sales for fiscal year 2025?
+  - Эталон: число: 416161 млн $
+  - Якоря: [`Total net sales`, `416,161`]
+  - Источник: Apple 10-K FY2025. 10-K MD&A: segment + category tables and Note 2 all carry the row; table caption sits in the previous prose chunk
+- [x] **`a-services-fy25`** — значение из таблицы, сложность: easy
+  - Вопрос: How much net sales did Apple's Services category generate in fiscal 2025?
+  - Эталон: число: 109158 млн $
+  - Якоря: [`Services`, `109,158`]
+  - Источник: Apple 10-K FY2025. 10-K 'Products and Services Performance' table, row 'Services (1)'
+- [x] **`a-china-fy25`** — значение из таблицы, сложность: medium
+  - Вопрос: What were Apple's net sales in the Greater China segment in fiscal 2025?
+  - Эталон: число: 64377 млн $
+  - Якоря: [`Greater China`, `64,377`]
+  - Источник: Apple 10-K FY2025. 10-K segment table; answer must not be the 2024 figure 66,952
+- [x] **`a-gm-pct-fy25`** — значение из таблицы, сложность: medium
+  - Вопрос: What was Apple's total gross margin percentage for fiscal 2025?
+  - Эталон: число: 46.9 %
+  - Якоря: [`Total gross margin percentage`, `46.9`]
+  - Источник: Apple 10-K FY2025. 10-K Gross Margin table; Products 36.8% and Services 75.4% are distractors in the same chunk
+- [x] **`a-rnd-fy25`** — значение из таблицы, сложность: easy
+  - Вопрос: How much did Apple spend on research and development in fiscal 2025?
+  - Эталон: число: 34550 млн $
+  - Якоря: [`Research and development`, `34,550`]
+  - Источник: Apple 10-K FY2025. 10-K Operating Expenses table
+- [x] **`a-ir-sensitivity`** — значение из таблицы, сложность: hard
+  - Вопрос: By how much would a 100 basis point increase in interest rates reduce the fair value of Apple's investment portfolio as of September 27, 2025?
+  - Эталон: число: 2416 млн $
+  - Якоря: [`Investment portfolio`, `2,416`]
+  - Источник: Apple 10-K FY2025. 10-K Item 7A table with an unusual layout (instrument / hypothetical increase / impact columns)
+- [ ] **`a-net-sales-q3fy26`** — значение из таблицы, сложность: medium
+  - Вопрос: What were Apple's total net sales for the three months ended June 27, 2026?
+  - Эталон: число: 109417 млн $
+  - Якоря: [`Total net sales`, `109,417`]
+  - Источник: Apple 10-Q Q3 FY2026. 10-Q; tables mix three-month and nine-month columns (364,357 is the nine-month distractor)
+- [x] **`a-iphone-9m-fy26`** — значение из таблицы, сложность: hard 🔒 holdout
+  - Вопрос: What were Apple's iPhone net sales for the first nine months of fiscal 2026?
+  - Эталон: число: 196515 млн $
+  - Якоря: [`iPhone`, `196,515`]
+  - Источник: Apple 10-Q Q3 FY2026. 10-Q category table, nine-month column; quarter figure 54,252 is the distractor
+- [x] **`a-employees-fy25`** — перефраз прозы, сложность: easy
+  - Вопрос: Roughly how many full-time equivalent employees did Apple have at the end of fiscal 2025?
+  - Эталон: число: 166000
+  - Якоря: [`166,000 full-time equivalent employees`]
+  - Источник: Apple 10-K FY2025. 10-K Item 1 Human Capital
+- [x] **`a-buyback-fy25`** — перефраз прозы, сложность: easy
+  - Вопрос: How much of its common stock did Apple buy back during fiscal 2025?
+  - Эталон: число: 89.3 млрд $
+  - Якоря: [`repurchased $89.3 billion`] **или** [`402 million shares`]
+  - Источник: Apple 10-K FY2025. 10-K MD&A Capital Return Program + Note 10; paraphrased ('buy back' vs 'repurchased')
+- [ ] **`a-wearables-why`** — перефраз прозы, сложность: easy
+  - Вопрос: Why did sales of Apple's Wearables, Home and Accessories category fall in fiscal 2025?
+  - Эталон: текст: «Because of lower net sales of Accessories and Wearables.»
+  - Якоря: [`Wearables, Home and Accessories net sales decreased during 2025`]
+  - Источник: Apple 10-K FY2025. 10-K MD&A one-sentence explanation
+- [x] **`a-tax-rate-why`** — перефраз прозы, сложность: medium 🔒 holdout
+  - Вопрос: What was the main reason Apple's effective tax rate was lower in fiscal 2025 than in fiscal 2024?
+  - Эталон: текст: «A $10.7 billion year-over-year decrease in the provision for income taxes related to the European Commission State Aid Decision (plus the impact of changes in unrecognized tax benefits).»
+  - Якоря: [`$10.7 billion year-over-year decrease`]
+  - Источник: Apple 10-K FY2025. 10-K MD&A Provision for Income Taxes; requires naming the State Aid Decision
+- [ ] **`a-rnd-why-q3fy26`** — перефраз прозы, сложность: easy
+  - Вопрос: What drove the increase in Apple's R&D expense in the third quarter of fiscal 2026?
+  - Эталон: текст: «Higher infrastructure-related costs, including investments in artificial intelligence, and headcount-related expenses.»
+  - Якоря: [`including investments in artificial intelligence`]
+  - Источник: Apple 10-Q Q3 FY2026. 10-Q MD&A Research and Development
+- [x] **`a-buyback-q3fy26`** — перефраз прозы, сложность: easy
+  - Вопрос: How much stock did Apple repurchase in the third quarter of fiscal 2026?
+  - Эталон: число: 25.8 млрд $
+  - Якоря: [`repurchased $25.8 billion`]
+  - Источник: Apple 10-Q Q3 FY2026. 10-Q MD&A Capital Return Program
+- [x] **`a-dma-fine`** — точный термин, сложность: medium
+  - Вопрос: How large was the fine the European Commission imposed on Apple in the DMA Article 5(4) Investigation?
+  - Эталон: число: 500 млн $
+  - Якоря: [`fined the Company €500 million`]
+  - Источник: Apple 10-K FY2025. 10-K Item 3 Legal Proceedings; amount is in euros (€500 million)
+- [x] **`a-fx-var`** — точный термин, сложность: medium
+  - Вопрос: What maximum one-day loss in fair value did Apple's VAR model estimate for its foreign currency derivative positions as of September 27, 2025?
+  - Эталон: число: 590 млн $
+  - Якоря: [`maximum one-day loss in fair value of $590 million`]
+  - Источник: Apple 10-K FY2025. 10-K Item 7A; 2024 value $538 million in the same sentence is the distractor
+- [x] **`a-siri-ai`** — точный термин, сложность: medium
+  - Вопрос: Which AI product did Apple introduce during the third quarter of fiscal 2026?
+  - Эталон: текст: «Siri AI.»
+  - Якоря: [`introduced Siri AI`]
+  - Источник: Apple 10-Q Q3 FY2026. 10-Q MD&A Business Seasonality and Product Introductions; post-training-cutoff fact, model cannot know it from memory
+- [x] **`a-dividend-change`** — сравнение 10-K и 10-Q, сложность: medium
+  - Вопрос: How did Apple's quarterly cash dividend per share change between the end of fiscal 2025 and June 27, 2026?
+  - Эталон: текст: «It increased from $0.26 to $0.27 per share.»
+  - Якоря: [`quarterly cash dividend was $0.26 per share`] **или** [`quarterly cash dividend was $0.27 per share`]
+  - Источник: Apple 10-K FY2025, Apple 10-Q Q3 FY2026. needs a chunk from the 10-K and one from the 10-Q
+- [x] **`a-gm-pct-delta`** — сравнение 10-K и 10-Q, сложность: hard 🔒 holdout
+  - Вопрос: By how many percentage points did Apple's total gross margin percentage for the third quarter of fiscal 2026 exceed its total gross margin percentage for full fiscal 2025?
+  - Эталон: число: 3.2 %
+  - Якоря: [`Total gross margin percentage`, `46.9`] **или** [`Total gross margin percentage`, `50.1`]
+  - Источник: Apple 10-K FY2025, Apple 10-Q Q3 FY2026. 50.1% (10-Q, three months) minus 46.9% (10-K); computed value, not stated anywhere
+- [x] **`a-iphone-units`** — ответа нет в документах, сложность: medium
+  - Вопрос: How many iPhone units did Apple sell in fiscal 2025?
+  - Эталон: отказ (refusal)
+  - Источник: Apple 10-K FY2025. Apple does not report unit sales; only net sales in dollars
+- [ ] **`a-ceo-pay`** — ответа нет в документах, сложность: medium
+  - Вопрос: What was Tim Cook's total compensation for fiscal 2025?
+  - Эталон: отказ (refusal)
+  - Источник: Apple 10-K FY2025. 10-K Item 11 incorporates the proxy statement by reference; no figures in the 10-K
+- [x] **`a-q4-guidance`** — ответа нет в документах, сложность: hard
+  - Вопрос: What net sales guidance did Apple give for the fourth quarter of fiscal 2026?
+  - Эталон: отказ (refusal)
+  - Источник: Apple 10-Q Q3 FY2026. 10-Q has no guidance; tempting to extrapolate from Q3 numbers
+- [x] **`a-trap-jpm-cet1`** — ловушка: чужой тенант, сложность: medium
+  - Вопрос: What was JPMorgan Chase's Standardized CET1 capital ratio at December 31, 2025?
+  - Эталон: отказ (refusal)
+  - Источник: —. asked as Acme; the answer exists only in Globex's documents
+- [ ] **`a-trap-jpm-employees`** — ловушка: чужой тенант, сложность: easy
+  - Вопрос: How many employees did JPMorgan Chase have globally at the end of 2025?
+  - Эталон: отказ (refusal)
+  - Источник: —. asked as Acme; answer exists only in Globex's documents
+
+## globex (JPMorgan)
+
+- [x] **`g-net-income-2025`** — значение из таблицы, сложность: easy
+  - Вопрос: What was JPMorgan Chase's net income for 2025?
+  - Эталон: число: 57048 млн $
+  - Якоря: [`Net income`, `57,048`] **или** [`net income of $57.0 billion`]
+  - Источник: JPM 10-K 2025. 10-K Executive Overview table + Firmwide overview prose
+- [ ] **`g-revenue-2025`** — значение из таблицы, сложность: easy
+  - Вопрос: What was JPMorgan Chase's total net revenue in 2025?
+  - Эталон: число: 182447 млн $
+  - Якоря: [`Total net revenue`, `182,447`] **или** [`Total net revenue was $182.4 billion`]
+  - Источник: JPM 10-K 2025. 10-K Executive Overview; managed-basis 185,581 is a distractor
+- [x] **`g-cet1-2025`** — значение из таблицы, сложность: medium
+  - Вопрос: What was JPMorgan Chase's Standardized CET1 capital ratio at December 31, 2025?
+  - Эталон: число: 14.6 %
+  - Якоря: [`CET1 capital`, `14.6`, `15.7`] **или** [`CET1 ratios were 14.6%`]
+  - Источник: JPM 10-K 2025. Advanced ratio 14.1% and 2024 ratio 15.7% are distractors
+- [x] **`g-eps-2025`** — значение из таблицы, сложность: easy
+  - Вопрос: What were JPMorgan Chase's diluted earnings per share for 2025?
+  - Эталон: число: 20.02
+  - Якоря: [`Diluted earnings per share`, `20.02`]
+  - Источник: JPM 10-K 2025. 10-K Executive Overview table
+- [ ] **`g-net-income-q2-26`** — значение из таблицы, сложность: medium
+  - Вопрос: What was JPMorgan Chase's net income for the second quarter of 2026?
+  - Эталон: число: 21155 млн $
+  - Якоря: [`Net income`, `21,155`] **или** [`net income of $21.2 billion`]
+  - Источник: JPM 10-Q Q2 2026. 10-Q; six-month figure 37,649 is the distractor
+- [x] **`g-cet1-q2-26`** — значение из таблицы, сложность: medium
+  - Вопрос: What was JPMorgan Chase's Standardized CET1 capital ratio at June 30, 2026?
+  - Эталон: число: 14.2 %
+  - Якоря: [`CET1 capital`, `14.2`, `15.1`] **или** [`CET1 ratios were each 14.2%`]
+  - Источник: JPM 10-Q Q2 2026. 10-Q Executive Overview
+- [x] **`g-nii-6m-26`** — значение из таблицы, сложность: hard
+  - Вопрос: What was JPMorgan Chase's net interest income for the six months ended June 30, 2026?
+  - Эталон: число: 50877 млн $
+  - Якоря: [`Net interest income`, `50,877`]
+  - Источник: JPM 10-Q Q2 2026. 10-Q table, six-month column; quarter figure 25,511 is the distractor
+- [ ] **`g-employees-2025`** — перефраз прозы, сложность: easy
+  - Вопрос: How many employees did JPMorgan Chase have worldwide as of December 31, 2025?
+  - Эталон: число: 318512
+  - Якоря: [`318,512 employees`]
+  - Источник: JPM 10-K 2025. 10-K Item 1 Human capital
+- [x] **`g-apple-card-what`** — перефраз прозы, сложность: easy
+  - Вопрос: What is the Apple Card transaction that JPMorgan Chase announced?
+  - Эталон: текст: «Chase will become the new issuer of Apple Card: on December 30, 2025 the Firm entered into a forward purchase commitment to acquire the Apple credit card portfolio, with closing expected in approximately 24 months.»
+  - Якоря: [`new issuer of Apple Card`]
+  - Источник: JPM 10-K 2025, JPM 10-Q Q2 2026. 10-K Executive Overview and 10-Q; post-cutoff fact
+- [x] **`g-apple-card-allowance`** — перефраз прозы, сложность: medium
+  - Вопрос: How much did the Apple Card transaction add to JPMorgan Chase's allowance for credit losses in 2025?
+  - Эталон: число: 2.2 млрд $
+  - Якоря: [`$2.2 billion related to the Apple Card transaction`]
+  - Источник: JPM 10-K 2025. 10-K: appears in several places (Executive Overview, CCB results, Note 13)
+- [x] **`g-expense-why`** — перефраз прозы, сложность: medium
+  - Вопрос: Why did JPMorgan Chase's noninterest expense rise in 2025?
+  - Эталон: текст: «Mainly higher compensation expense (higher revenue-related compensation and growth in the number of employees), plus higher brokerage expense and distribution fees, higher auto lease depreciation, continued technology and marketing investment and higher occupancy expense.»
+  - Якоря: [`Noninterest expense was $95.6 billion, up 4%`]
+  - Источник: JPM 10-K 2025. 10-K Firmwide overview bullet
+- [ ] **`g-visa-gain-q2-26`** — перефраз прозы, сложность: easy
+  - Вопрос: What net gain did JPMorgan Chase record related to its Visa shares in the second quarter of 2026?
+  - Эталон: число: 4.6 млрд $
+  - Якоря: [`$4.6 billion net gain`]
+  - Источник: JPM 10-Q Q2 2026. 10-Q Executive Overview; note the 10-K mentions the 2024 Visa gain of $7.9 billion as a distractor
+- [x] **`g-nir-why-q2-26`** — перефраз прозы, сложность: medium
+  - Вопрос: Why did JPMorgan Chase's noninterest revenue jump in the second quarter of 2026?
+  - Эталон: текст: «Predominantly the $4.6 billion net gain related to Visa shares, plus higher Markets noninterest revenue, $1.0 billion of gains on certain equity investments, higher asset management and investment banking fees and higher auto operating lease income.»
+  - Якоря: [`was $31.8 billion, up 47%`]
+  - Источник: JPM 10-Q Q2 2026. 10-Q Firmwide overview bullet
+- [x] **`g-branches`** — точный термин, сложность: hard
+  - Вопрос: How many branches did JPMorgan Chase own or lease at December 31, 2025?
+  - Эталон: число: 5083
+  - Якоря: [`5,083 branches`]
+  - Источник: JPM 10-K 2025. 10-K Item 2 Properties, footnote under a square-footage table
+- [x] **`g-dimon-10b5-1`** — точный термин, сложность: hard 🔒 holdout
+  - Вопрос: How many shares are to be sold under the Rule 10b5-1 trading arrangement James Dimon adopted on November 10, 2025?
+  - Эталон: число: 200000
+  - Якоря: [`James Dimon`, `200,000`]
+  - Источник: JPM 10-K 2025. 10-K Item 9B table row
+- [ ] **`g-slr-2025`** — точный термин, сложность: medium
+  - Вопрос: What was JPMorgan Chase's SLR at December 31, 2025?
+  - Эталон: число: 5.8 %
+  - Якоря: [`SLR was 5.8%`]
+  - Источник: JPM 10-K 2025. acronym only (supplementary leverage ratio); tests exact-term retrieval
+- [x] **`g-cet1-delta`** — сравнение 10-K и 10-Q, сложность: hard
+  - Вопрос: By how many percentage points did JPMorgan Chase's Standardized CET1 ratio decline between December 31, 2025 and June 30, 2026?
+  - Эталон: число: 0.4 %
+  - Якоря: [`CET1 ratios were 14.6%`] **или** [`CET1 ratios were each 14.2%`] **или** [`CET1 capital ratio`, `14.2`, `14.6`, `11.5`]
+  - Источник: JPM 10-K 2025, JPM 10-Q Q2 2026. 14.6% to 14.2%; stored as a positive magnitude because the question says 'decline'
+- [x] **`g-tbvps-delta`** — сравнение 10-K и 10-Q, сложность: hard 🔒 holdout
+  - Вопрос: How much did JPMorgan Chase's tangible book value per share increase from December 31, 2025 to June 30, 2026?
+  - Эталон: число: 5.79
+  - Якоря: [`Tangible book value per share`, `113.35`, `107.56`] **или** [`Tangible book value per share`, `107.56`] **или** [`Tangible book value per share`, `113.35`]
+  - Источник: JPM 10-K 2025, JPM 10-Q Q2 2026. $107.56 to $113.35; computed
+- [x] **`g-apple-card-price`** — ответа нет в документах, сложность: hard
+  - Вопрос: What purchase price will JPMorgan Chase pay to acquire the Apple Card portfolio?
+  - Эталон: отказ (refusal)
+  - Источник: JPM 10-K 2025. price not disclosed; filings give ~$104 billion credit exposure and ~$23 billion drawn loans, which a model may wrongly present as the price
+- [x] **`g-dimon-pay`** — ответа нет в документах, сложность: medium
+  - Вопрос: What was James Dimon's total compensation for 2025?
+  - Эталон: отказ (refusal)
+  - Источник: JPM 10-K 2025. not in the 10-K (proxy statement)
+- [ ] **`g-net-income-q3-26`** — ответа нет в документах, сложность: hard
+  - Вопрос: What was JPMorgan Chase's net income for the third quarter of 2026?
+  - Эталон: отказ (refusal)
+  - Источник: JPM 10-Q Q2 2026. latest filing is Q2 2026; tempting to return the Q2 figure
+- [x] **`g-trap-apple-sales`** — ловушка: чужой тенант, сложность: hard 🔒 holdout
+  - Вопрос: What were Apple's total net sales for fiscal 2025?
+  - Эталон: отказ (refusal)
+  - Источник: —. asked as Globex; Globex filings mention Apple (Apple Card) so retrieval will find Apple-related chunks, but none has Apple's sales
+- [x] **`g-trap-apple-employees`** — ловушка: чужой тенант, сложность: medium
+  - Вопрос: How many full-time equivalent employees did Apple have as of September 27, 2025?
+  - Эталон: отказ (refusal)
+  - Источник: —. asked as Globex; JPM has its own employee figures that a model might substitute
