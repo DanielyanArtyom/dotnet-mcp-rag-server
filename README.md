@@ -10,16 +10,24 @@ I used SEC EDGAR filings (10-K and 10-Q) as the corpus, one company per tenant. 
 
 ## Results
 
-Four real filings (Apple and JPMorgan, 10-K and 10-Q). I wrote the questions from the filings before tuning anything. `gpt-4o` answers. Numbers are checked in code and prose answers are graded by `gpt-5-mini`, so the model never grades its own answers.
+**Answer accuracy went from 70 % to 87 %, with 0 % false answers throughout** (30 questions over four real filings: Apple and JPMorgan, 10-K and 10-Q). I wrote the questions from the filings before tuning anything and measured every change on its own:
 
-| | Baseline | Current defaults |
+| Change | Result | Kept? |
 |---|---|---|
-| Answer accuracy | 77 % | **80 %** |
-| False answers (answered when it should have refused) | 0 % | **0 %** |
-| Retrieval hit@3 / hit@10 | 52 % / 76 % | **62 %** / 76 % |
-| Retrieval MRR | 0.524 | **0.565** |
+| 10 sources to the model instead of 5 | accuracy 70 % → 83 %, 4 gained / 0 lost | Yes |
+| Context header on every chunk | hit@10 67 % → 92 % | Yes |
+| Protect decimals during splitting | MRR 0.490 → 0.572, p = 0.0085 | Yes |
+| Repeat table headers and captions | accuracy 77 % → 80 %, hit@3 52 % → 62 % (35-question set) | Yes |
+| Hybrid search (FTS + RRF) | 3 gained / 3 lost, p = 1.0 | No |
+| Merge chunks ≤ 20 tokens | 1 gained / 1 lost | No |
+| Max 3 chunks per document | accuracy 70 % → 63 %, MRR worse (p = 0.033) | No |
+| Key-value table format | 0 gained / 1 lost, +58 % chunks | No |
+| Temperature 0 / 0.2 / 0.6 | 87 % at each | No effect |
+| Claude Code + MCP search instead of `/api/ask` | 87 % vs 87 %, ~9× the cost | Search only |
 
-This is the extended set of 35 questions, including 5 whose answer sits in the second half of a split table. On the original 30 questions, the Stage 4 tuning took accuracy from 70 % to 87 %. The two sets are different, so their percentages can't be compared directly. A 6-question holdout that I never tuned against scores 4/6 with 0 false answers. None of the gains is statistically significant at this sample size. Raw runs are in [`tools/Lumen.Eval/runs/`](tools/Lumen.Eval/runs/).
+`gpt-4o` answers. Numbers are checked in code and prose answers are graded by `gpt-5-mini`, so the model never grades its own answers.
+
+Later I added 5 harder questions whose answer sits in the second half of a split table. On that 35-question set the table work took accuracy from 77 % to 80 % and MRR from 0.524 to 0.565; the two sets are different, so their percentages can't be compared directly. A 6-question holdout that I never tuned against scores 4/6 with 0 false answers. None of the gains is statistically significant at this sample size. Raw runs are in [`tools/Lumen.Eval/runs/`](tools/Lumen.Eval/runs/).
 
 ## Highlights
 
@@ -75,21 +83,6 @@ Uploads are synchronous and all-or-nothing: every chunk is embedded before anyth
 - Questions are labelled with exact phrases from the filing instead of chunk ids, so the labels still work after re-chunking.
 - `compare` runs a McNemar test on per-question changes and a paired randomization test on MRR.
 - Each run saves its settings, prompt hash, git commit and corpus to `run.json`, and per-question results to `results.jsonl`.
-
-What I tried, one change at a time:
-
-| Change | Result | Kept? |
-|---|---|---|
-| Context header on every chunk | hit@10 67 % → 92 % | Yes |
-| Protect decimals during splitting | MRR 0.490 → 0.572, p = 0.0085 | Yes |
-| 10 sources instead of 5 | accuracy 70 % → 83 %, 4:0 | Yes |
-| Repeat table headers and captions | accuracy 77 % → 80 %, hit@3 52 % → 62 % | Yes |
-| Hybrid search (FTS + RRF) | 3:3, p = 1.0 | No |
-| Merge chunks ≤ 20 tokens | 1:1 | No |
-| Max 3 chunks per document | accuracy 70 % → 63 %, MRR worse (p = 0.033) | No |
-| Key-value table format | 0:1, +58 % chunks | No |
-| Temperature 0 / 0.2 / 0.6 | 87 % at each | No effect |
-| Claude Code + MCP search instead of `/api/ask` | 87 % vs 87 %, ~9× cost | Search only |
 
 Known gaps: 10-K vs 10-Q comparisons, tables whose header sits in a separate table above them, and a sample too small for significance.
 

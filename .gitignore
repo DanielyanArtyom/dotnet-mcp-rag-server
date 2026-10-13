@@ -29,3 +29,6 @@ tools/media/node_modules/
 
 # Local docker compose secrets (copy from .env.example)
 .env
+
+# Interview prep notes (personal)
+.questions/
